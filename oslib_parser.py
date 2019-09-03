@@ -657,7 +657,7 @@ def write_swi_conditions(defmod, fh):
                     name = reg.name
                 elif reg.assign == '=':
                     if isinstance(reg.dtype, str) and reg.dtype[0] == '&':
-                        desc = 'pointer to fill ' + reg.name
+                        desc = 'pointer to ' + reg.name
                     else:
                         desc = reg.name
                     name = reg.name
