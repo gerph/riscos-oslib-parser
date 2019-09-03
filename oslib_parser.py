@@ -586,23 +586,55 @@ def parse_file(filename):
     return defmod
 
 
-def write_swi_conditions(defmod, filename):
+def write_all_swi_conditions(defmods, filename):
     with open(filename, 'w') as fh:
-        for swi, swilist in defmod.swis.items():
-            swidef = swilist[0]
+        # Header:
+        fh.write('''\
+"""
+Conditions for the entry to SWIs by name.
 
-            if '_' not in swidef.name:
-                # Skip vectors, events, etc
-                continue
-            if swidef.name.startswith("Service_") or \
-               swidef.name.startswith("Event_") or \
-               swidef.name.startswith("UpCall_"):
-                # Skip services, events
-                continue
+Hopefully these will be correct.
+"""
 
-            regdef = {}
-            for reg in swidef.entry:
-                if reg == 'FLAGS':
+swi_conditions = {
+''')
+
+        defmods = [defmod for defmod in defmods if defmod.swis]
+        defmods = sorted(defmods, key=lambda defmod: min(defmod.swis))
+
+        for defmod in defmods:
+            fh.write('    # %s:\n' % (defmod.title,))
+            write_swi_conditions(defmod, fh)
+            fh.write('\n')
+
+        # Footer:
+        fh.write('''\
+}
+''')
+
+
+def write_swi_conditions(defmod, fh):
+    for swi, swilist in defmod.swis.items():
+        swidef = swilist[0]
+
+        if '_' not in swidef.name:
+            # Skip vectors, events, etc
+            continue
+        if swidef.name.startswith("Service_") or \
+           swidef.name.startswith("Event_") or \
+           swidef.name.startswith("UpCall_"):
+            # Skip services, events
+            continue
+
+        regdefs = {
+            'entry': {},
+            'exit': {},
+        }
+        for name, regs in (('entry', swidef.entry), ('exit', swidef.exit)):
+
+            regdef = regdefs[name]
+            for reg in regs:
+                if reg.reg == 'FLAGS':
                     continue
 
                 if reg.assign == '#':
@@ -617,6 +649,12 @@ def write_swi_conditions(defmod, filename):
                 elif reg.assign == '+':
                     desc = "in block " + reg.name
                     name = reg.name
+                elif reg.assign == '?':
+                    desc = 'corrupted'
+                    name = None
+                elif reg.assign == '!':
+                    desc = 'updated ' + reg.name
+                    name = reg.name
                 elif reg.assign == '=':
                     if isinstance(reg.dtype, str) and reg.dtype[0] == '&':
                         desc = 'pointer to fill ' + reg.name
@@ -624,7 +662,7 @@ def write_swi_conditions(defmod, filename):
                         desc = reg.name
                     name = reg.name
                 else:
-                    desc = "unknown assignment '%s' of %s'" % (reg.assign, reg.name)
+                    desc = "unknown assignment '%s' of %s" % (reg.assign, reg.name)
                     name = None
 
                 regnum = int(reg.reg[1:])
@@ -633,18 +671,22 @@ def write_swi_conditions(defmod, filename):
                 else:
                     regdef[regnum] = desc
 
-            if regdef:
-                # Only if there were actual registers defined will we output the details
-                reglist = ['%i: "%s"' % (num, desc) for num, desc in sorted(regdef.items())]
-                fh.write("    0x%06x: {%s},\n" % (swidef.number, ", ".join(reglist)))
+        entry_reglist = ['%i: "%s"' % (num, desc) for num, desc in sorted(regdefs['entry'].items())]
+        exit_reglist = ['%i: "%s"' % (num, desc) for num, desc in sorted(regdefs['exit'].items())]
+        fh.write("    0x%06x: {" % (swidef.number,))
+        fh.write("'description': %r,\n" % (swidef.description,))
+        fh.write("               ")
+        fh.write("'entry': {%s},\n" % (", ".join(entry_reglist),))
+        fh.write("               ")
+        fh.write("'exit': {%s}},\n" % (", ".join(exit_reglist)))
 
 
 def setup_argparse():
     parser = argparse.ArgumentParser(usage="%s [<options>] <def-mod-file>" % (os.path.basename(sys.argv[0]),))
     parser.add_argument('--debug', action='store_true', default=False,
                         help="Enable debugging")
-    parser.add_argument('file',
-                        help="DefMod file to read")
+    parser.add_argument('files', nargs="+",
+                        help="DefMod files to read")
     parser.add_argument('--swi-conditions', action='store',
                         help="File to write the SWI conditions into")
 
@@ -659,10 +701,18 @@ def main():
     global debug
     debug = options.debug
 
-    defmod = parse_file(options.file)
+    all_defmods = []
+
+    for defmodfile in options.files:
+        print("Reading %s" % (defmodfile,))
+        try:
+            defmod = parse_file(defmodfile)
+            all_defmods.append(defmod)
+        except Exception as exc:
+            print("  Failed %s: %r" % (defmodfile, exc))
 
     if options.swi_conditions:
-        write_swi_conditions(defmod, options.swi_conditions)
+        write_all_swi_conditions(all_defmods, options.swi_conditions)
 
 
 if __name__ == '__main__':
