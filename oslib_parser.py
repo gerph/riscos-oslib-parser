@@ -613,6 +613,57 @@ swi_conditions = {
 ''')
 
 
+def describe_swi_regsdefs(swidef):
+    """
+    Describe the register definitions for entry and exit conditions of a SWI.
+    """
+    regdefs = {
+        'entry': {},
+        'exit': {},
+    }
+    for name, regs in (('entry', swidef.entry), ('exit', swidef.exit)):
+
+        regdef = regdefs[name]
+        for reg in regs:
+            if reg.reg == 'FLAGS':
+                continue
+
+            if reg.assign == '#':
+                desc = 'constant ' + str(reg.name)
+                name = None
+            elif reg.assign == '->':
+                desc = 'pointer to ' + reg.name
+                name = reg.name
+            elif reg.assign == '|':
+                desc = "OR " + reg.name
+                name = reg.name
+            elif reg.assign == '+':
+                desc = "in block " + reg.name
+                name = reg.name
+            elif reg.assign == '?':
+                desc = 'corrupted'
+                name = None
+            elif reg.assign == '!':
+                desc = 'updated ' + reg.name
+                name = reg.name
+            elif reg.assign == '=':
+                if isinstance(reg.dtype, str) and reg.dtype[0] == '&':
+                    desc = 'pointer to ' + reg.name
+                else:
+                    desc = reg.name
+                name = reg.name
+            else:
+                desc = "unknown assignment '%s' of %s" % (reg.assign, reg.name)
+                name = None
+
+            regnum = int(reg.reg[1:])
+            if regnum in regdef:
+                regdef[regnum] += ' ' + desc
+            else:
+                regdef[regnum] = desc
+    return regdefs
+
+
 def write_swi_conditions(defmod, fh):
     for swi, swilist in defmod.swis.items():
         swidef = swilist[0]
@@ -626,59 +677,94 @@ def write_swi_conditions(defmod, fh):
             # Skip services, events
             continue
 
-        regdefs = {
-            'entry': {},
-            'exit': {},
-        }
-        for name, regs in (('entry', swidef.entry), ('exit', swidef.exit)):
-
-            regdef = regdefs[name]
-            for reg in regs:
-                if reg.reg == 'FLAGS':
-                    continue
-
-                if reg.assign == '#':
-                    desc = 'constant ' + str(reg.name)
-                    name = None
-                elif reg.assign == '->':
-                    desc = 'pointer to ' + reg.name
-                    name = reg.name
-                elif reg.assign == '|':
-                    desc = "OR " + reg.name
-                    name = reg.name
-                elif reg.assign == '+':
-                    desc = "in block " + reg.name
-                    name = reg.name
-                elif reg.assign == '?':
-                    desc = 'corrupted'
-                    name = None
-                elif reg.assign == '!':
-                    desc = 'updated ' + reg.name
-                    name = reg.name
-                elif reg.assign == '=':
-                    if isinstance(reg.dtype, str) and reg.dtype[0] == '&':
-                        desc = 'pointer to ' + reg.name
+        # Decide whether this is a variadic SWI or not.
+        if len(swilist) > 1:
+            # Variadic SWI definition.
+            # In theory there should be a set of SWI defs that have a constant value present on a
+            # register. Usually that'll be R0 or R1.
+            constant_absent = []
+            constant_present = []
+            constant_notint = []
+            constant_registers = set()
+            for swidef in swilist:
+                has_constant = None
+                has_integer = False
+                for reg in swidef.entry:
+                    if reg.assign == '#':
+                        if has_constant is not None:
+                            print("SWI &%06x (%s) has multiple constants" % (swidef.number, swidef.name))
+                        has_constant = reg.reg
+                        constant_registers |= set([reg.reg])
+                        if isinstance(reg.name, int):
+                            has_integer = True
+                if has_constant:
+                    if has_integer:
+                        constant_present.append(swidef)
                     else:
-                        desc = reg.name
-                    name = reg.name
+                        constant_notint.append(swidef)
                 else:
-                    desc = "unknown assignment '%s' of %s" % (reg.assign, reg.name)
-                    name = None
+                    constant_absent.append(swidef)
+            print("SWI &%06x (%s) has constants in registers: %s"
+                    % (swidef.number, swidef.name, ", ".join(sorted(constant_registers))))
+            print("          has %s variants with constants" % (len(constant_present),))
+            if constant_notint:
+                print("          has %s variants with constants that aren't ints" % (len(constant_notint),))
+            print("          has %s variants without constants" % (len(constant_absent),))
 
-                regnum = int(reg.reg[1:])
-                if regnum in regdef:
-                    regdef[regnum] += ' ' + desc
-                else:
-                    regdef[regnum] = desc
+            if len(constant_notint):
+                # The constant that's used isn't an integer - it's probably a reference to a constant
+                # which we don't yet support.
+                print("          will not be matched, because it has non-int constants")
+                continue
 
-        entry_reglist = ['%i: "%s"' % (num, desc) for num, desc in sorted(regdefs['entry'].items())]
-        exit_reglist = ['%i: "%s"' % (num, desc) for num, desc in sorted(regdefs['exit'].items())]
-        fh.write("    0x%06x: {" % (swidef.number,))
-        fh.write("'description': %r,\n" % (swidef.description,))
-        fh.write("               ")
-        fh.write("'entry': {%s},\n" % (", ".join(entry_reglist),))
-        fh.write("               ")
-        fh.write("'exit': {%s}},\n" % (", ".join(exit_reglist)))
+            indent = "    0x%06x: [" % (swidef.number,)
+            # First list the variants that we know have matchable constants.
+            for swidef in constant_present:
+                regdefs = describe_swi_regsdefs(swidef)
+
+                # Locate the constant.
+                match_regs = {}
+                for reg in swidef.entry:
+                    if reg.assign == '#':
+                        match_reg = int(reg.reg[1:])
+                        match_value = reg.name
+                        match_regs[match_reg] = match_value
+
+                # Register list at the moment is only ever 1 entry for the match
+                match_reglist = ['%i: %s' % (reg, value) for reg, value in sorted(match_regs.items())]
+
+                entry_reglist = ['%i: "%s"' % (num, desc) for num, desc in sorted(regdefs['entry'].items())]
+                exit_reglist = ['%i: "%s"' % (num, desc) for num, desc in sorted(regdefs['exit'].items())]
+
+                fh.write("%s{'match': {%s},\n" % (indent, ', '.join(match_reglist),))
+                indent = '               '
+                if swidef.description:
+                    fh.write("%s'description': %r,\n" % (indent, swidef.description,))
+                fh.write("%s 'entry': {%s},\n" % (indent, ", ".join(entry_reglist),))
+                fh.write("%s 'exit': {%s}},\n" % (indent, ", ".join(exit_reglist),))
+
+            # Now list the variants that have no matches.
+            for swidef in constant_absent:
+                regdefs = describe_swi_regsdefs(swidef)
+
+                entry_reglist = ['%i: "%s"' % (num, desc) for num, desc in sorted(regdefs['entry'].items())]
+                exit_reglist = ['%i: "%s"' % (num, desc) for num, desc in sorted(regdefs['exit'].items())]
+                fh.write("%s{" % (indent,))
+                indent = '               '
+                fh.write("'description': %r,\n" % (swidef.description,))
+                fh.write("%s 'entry': {%s},\n" % (indent, ", ".join(entry_reglist)))
+                fh.write("%s 'exit': {%s}},\n" % (indent, ", ".join(exit_reglist)))
+            fh.write("%s],\n" % (indent,))
+        else:
+            regdefs = describe_swi_regsdefs(swidef)
+
+            entry_reglist = ['%i: "%s"' % (num, desc) for num, desc in sorted(regdefs['entry'].items())]
+            exit_reglist = ['%i: "%s"' % (num, desc) for num, desc in sorted(regdefs['exit'].items())]
+            fh.write("    0x%06x: [{" % (swidef.number,))
+            indent = '               '
+            fh.write("'description': %r,\n" % (swidef.description,))
+            fh.write("%s 'entry': {%s},\n" % (indent, ", ".join(entry_reglist)))
+            fh.write("%s 'exit': {%s}}],\n" % (indent, ", ".join(exit_reglist)))
 
 
 def setup_argparse():
