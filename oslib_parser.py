@@ -4,9 +4,11 @@ Parse an OSLib definition file.
 """
 
 import argparse
+import datetime
 import os
 import re
 import sys
+import time
 
 
 # Whether we debug the parser
@@ -104,7 +106,8 @@ class SWI(object):
 
 class DefMod(object):
 
-    def __init__(self):
+    def __init__(self, name):
+        self.name = name
         self.constants =  {}
         self.title = None
         self.types = {}
@@ -112,6 +115,11 @@ class DefMod(object):
         self.types = {}
         self.swis = {}
         self.interfaces = {}
+        # Special cases of swis (the entries are also in SWIs):
+        self.vectors = {}
+        self.services = {}
+        self.events = {}
+        self.upcalls = {}
 
     def __repr__(self):
         return "<DefMod(%r, %i constants)>" % (self.title, len(self.constants))
@@ -135,11 +143,33 @@ class DefMod(object):
     def add_swi(self, swi):
         if swi.name in self.interfaces:
             print("Redefinition of SWI %x : %r / %r" % (swi.number, swi, self.interfaces[swi.name]))
-        if swi.number in self.swis:
-            self.swis[swi.number].append(swi)
-        else:
-            self.swis[swi.number] = [swi]
         self.interfaces[swi.name] = swi
+
+        if swi.name.startswith("Service_"):
+            swilist = self.services
+            swi.name = "OS_ServiceCall_" + swi.name[8:]
+        elif swi.name.startswith("Event_"):
+            swilist = self.events
+            swi.name = "OS_Generate" + swi.name
+        elif swi.name.startswith("UpCall_"):
+            swi.name = "OS_" + swi.name
+            swilist = self.upcalls
+        elif swi.name.endswith("V") and "_" not in swi.name:
+            swi.name = "OS_CallVector_" + swi.name
+            swilist = self.vectors
+        else:
+            swilist = self.swis
+
+        if swi.number in swilist:
+            swilist[swi.number].append(swi)
+        else:
+            swilist[swi.number] = [swi]
+        if swilist is not self.swis:
+            swilist = self.swis
+            if swi.number in swilist:
+                swilist[swi.number].append(swi)
+            else:
+                swilist[swi.number] = [swi]
 
 
 class Statement(object):
@@ -546,8 +576,11 @@ class Statement(object):
                 break
 
 
-def parse_file(filename):
-    defmod = DefMod()
+def parse_file(filename, name=None):
+    if name is None:
+        name = os.path.basename(filename).title()
+
+    defmod = DefMod(name)
     with open(filename) as fh:
         accumulator = []
         inquotes = False
@@ -583,6 +616,9 @@ def parse_file(filename):
             if quotes_present & 1:
                 inquotes = not inquotes
 
+    if accumulator:
+        Statement(defmod, accumulator)
+
     return defmod
 
 
@@ -601,11 +637,34 @@ swi_conditions = {
 
         defmods = [defmod for defmod in defmods if defmod.swis]
         defmods = sorted(defmods, key=lambda defmod: min(defmod.swis))
+        # We now have a list of defmods ordered by their lowest swi number.
+        mods = [{'name': defmod.name,
+                 'defmod': defmod,
+                 'swis': dict(defmod.swis)
+                } for defmod in defmods]
+        # Now we want to merge the SWIs into the earlier modules if they are duplicates.
+        # This applies to definitions of service calls in separate modules.
+        swis_known = {}
+        for mod in mods:
+            for swinum, swilist in sorted(mod['swis'].items()):
+                if swinum in swis_known:
+                    # Move the SWIs to the earlier module's swi entry and remove from this module
+                    swis_known[swinum].extend(swilist)
+                    del mod['swis'][swinum]
+                else:
+                    swis_known[swinum] = swilist
 
-        for defmod in defmods:
-            fh.write('    # %s:\n' % (defmod.title,))
-            write_swi_conditions(defmod, fh)
-            fh.write('\n')
+        # Resort mods based on the lowest SWI present (which will now move many modules back to their
+        # real location now that the UpCalls, Vecctors, Events and Service Calls have been merged into
+        # the OS module.
+        mods = sorted(mods, key=lambda mod: min(mod['swis']) if mod['swis'] else 0)
+
+        for mod in mods:
+            defmod = mod['defmod']
+            if mod['swis']:
+                fh.write('    # %s:\n' % (defmod.title,))
+                write_swi_conditions(mod['swis'], fh)
+                fh.write('\n')
 
         # Footer:
         fh.write('''\
@@ -664,17 +723,12 @@ def describe_swi_regsdefs(swidef):
     return regdefs
 
 
-def write_swi_conditions(defmod, fh):
-    for swi, swilist in defmod.swis.items():
+def write_swi_conditions(swis, fh):
+    for swi, swilist in swis.items():
         swidef = swilist[0]
 
         if '_' not in swidef.name:
             # Skip vectors, events, etc
-            continue
-        if swidef.name.startswith("Service_") or \
-           swidef.name.startswith("Event_") or \
-           swidef.name.startswith("UpCall_"):
-            # Skip services, events
             continue
 
         # Decide whether this is a variadic SWI or not.
@@ -725,7 +779,7 @@ def write_swi_conditions(defmod, fh):
                 # Locate the constant.
                 match_regs = {}
                 for reg in swidef.entry:
-                    if reg.assign == '#':
+                    if reg.assign == '#' and reg.reg != 'FLAGS':
                         match_reg = int(reg.reg[1:])
                         match_value = reg.name
                         match_regs[match_reg] = match_value
@@ -736,8 +790,9 @@ def write_swi_conditions(defmod, fh):
                 entry_reglist = ['%i: "%s"' % (num, desc) for num, desc in sorted(regdefs['entry'].items())]
                 exit_reglist = ['%i: "%s"' % (num, desc) for num, desc in sorted(regdefs['exit'].items())]
 
-                fh.write("%s{'match': {%s},\n" % (indent, ', '.join(match_reglist),))
+                fh.write("%s{'label': %r,\n" % (indent, swidef.name,))
                 indent = '               '
+                fh.write("%s 'match': {%s},\n" % (indent, ', '.join(match_reglist),))
                 if swidef.description:
                     fh.write("%s'description': %r,\n" % (indent, swidef.description,))
                 fh.write("%s 'entry': {%s},\n" % (indent, ", ".join(entry_reglist),))
@@ -749,8 +804,9 @@ def write_swi_conditions(defmod, fh):
 
                 entry_reglist = ['%i: "%s"' % (num, desc) for num, desc in sorted(regdefs['entry'].items())]
                 exit_reglist = ['%i: "%s"' % (num, desc) for num, desc in sorted(regdefs['exit'].items())]
-                fh.write("%s{" % (indent,))
+                fh.write("%s{'label': %r,\n" % (indent, swidef.name))
                 indent = '               '
+                fh.write("%s " % (indent,))
                 fh.write("'description': %r,\n" % (swidef.description,))
                 fh.write("%s 'entry': {%s},\n" % (indent, ", ".join(entry_reglist)))
                 fh.write("%s 'exit': {%s}},\n" % (indent, ", ".join(exit_reglist)))
@@ -762,9 +818,63 @@ def write_swi_conditions(defmod, fh):
             exit_reglist = ['%i: "%s"' % (num, desc) for num, desc in sorted(regdefs['exit'].items())]
             fh.write("    0x%06x: [{" % (swidef.number,))
             indent = '               '
-            fh.write("'description': %r,\n" % (swidef.description,))
+            fh.write("'label': %r,\n" % (swidef.name,))
+            fh.write("%s 'description': %r,\n" % (indent, swidef.description,))
             fh.write("%s 'entry': {%s},\n" % (indent, ", ".join(entry_reglist)))
             fh.write("%s 'exit': {%s}}],\n" % (indent, ", ".join(exit_reglist)))
+
+
+class Template(object):
+
+    def __init__(self, path):
+        import jinja2
+        template_loader = jinja2.FileSystemLoader(searchpath=path)
+        self.environment = jinja2.Environment(loader=template_loader)
+
+    def render(self, template_name, template_vars=None):
+        """
+        Render a template, and return it.
+
+        @param: template_name: The name of the template to render
+        @param: template_vars A dictionary of variables to process
+
+        @return: generated output
+        """
+        if template_vars is None:
+            template_vars = {}
+        temp = self.environment.get_template(template_name)
+        return temp.render(template_vars)
+
+    def render_to_file(self, template_name, output, template_vars=None):
+        """
+        Render a template, and write it to a file.
+
+        @param template_name: The name of the template to render
+        @param output:        The output filename
+        @param template_vars: A dictionary of variables to process
+        """
+        content = self.render(template_name, template_vars)
+        with open(output, 'w') as f:
+            print("Create %s" % (output,))
+            f.write(content.encode("utf-8"))
+
+
+def now():
+    return time.time()
+
+
+def timestamp(epochtime, time_format="%Y-%m-%d %H:%M:%S"):
+    return datetime.datetime.fromtimestamp(epochtime).strftime(time_format)
+
+
+def create_pymodule_template(defmods, filename):
+    template = Template(os.path.dirname(__file__))
+    template.render_to_file('pymodule.py.j2', filename,
+                            {
+                                'now': now,
+                                'timestamp': timestamp,
+                                'defmods': defmods
+                            })
 
 
 def setup_argparse():
@@ -775,6 +885,8 @@ def setup_argparse():
                         help="DefMod files to read")
     parser.add_argument('--swi-conditions', action='store',
                         help="File to write the SWI conditions into")
+    parser.add_argument('--create-pymodule-template', action='store',
+                        help="File to write a template for a pymodule implementation")
 
     return parser
 
@@ -799,6 +911,9 @@ def main():
 
     if options.swi_conditions:
         write_all_swi_conditions(all_defmods, options.swi_conditions)
+
+    if options.create_pymodule_template:
+        create_pymodule_template(all_defmods, options.create_pymodule_template)
 
 
 if __name__ == '__main__':

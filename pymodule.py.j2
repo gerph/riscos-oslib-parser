@@ -1,0 +1,68 @@
+"""
+Python module.
+"""
+
+from riscos.modules.pymodules import PyModule
+from riscos.errors import RISCOSSyntheticError
+
+
+{% for defmod in defmods -%}
+class {{ defmod.name }}(PyModule):
+    version = '0.01'
+    date = '{{ timestamp(now(), "%d %b %Y") }}'
+{%- set swis = defmod.swis|dictsort()|list() %}
+{%- set first_swi = swis[0][1] %}
+{%- set swi_base = swis[0][0] %}
+    swi_base = 0x{{ '%x'|format(swi_base) }}
+    swi_prefix = "{{ first_swi[0].name.split('_')[0] }}"
+    swi_names = [
+{%- for swi, swilist in swis %}
+            "{{ swilist[0].name.split('_', 1)[1] }}",
+{%- endfor %}
+        ]
+
+    def __init__(self, ro, module):
+        super({{ defmod.name }}, self).__init__(ro, module)
+
+    def swi(self, offset, regs):
+{%- for swi, swilist in swis %}
+ {%- if loop.first -%}
+  {%- set cond='if' -%}
+ {%- else -%}
+  {%- set cond='elif' -%}
+ {%- endif %}
+        {{ cond }} offset == {{ swi - swi_base }}:
+            return self.swi_{{ swilist[0].name|lower() }}(regs)
+{%- endfor %}
+
+        return False
+
+{%- for swi, swilist in swis %}
+{% set baseswi = swilist[0] %}
+    def swi_{{ swilist[0].name|lower() }}(self, offset, regs):
+        """
+        {{ baseswi.name }} - {{ baseswi.description }}
+{% for regs in baseswi.entry %}
+        {{ '=>' if loop.first else '  ' }}  {{ regs.reg }} {{ regs.assign }} {{ regs.name }}
+{%- endfor %}
+{% for regs in baseswi.exit %}
+        {{ '<=' if loop.first else '  ' }}  {{ regs.reg }} {{ regs.assign }} {{ regs.name }}
+{%- endfor %}
+        """
+{%- for regs in baseswi.entry %}
+{%- if regs.assign == '#' %}
+        # {{ regs.reg }} is {{ regs.name }}
+{%- elif regs.assign == '->' %}
+ {%- if regs.dtype == '.String' %}
+        {{ regs.name }} = self.ro.memory[self.ro.regs[{{regs.reg[1:]}}]].string
+ {%- else %}
+        {{ regs.name }} = self.ro.memory[self.ro.regs[{{regs.reg[1:]}}]]
+ {%- endif %}
+{%- elif regs.assign == '=' %}
+        {{ regs.name }} = ro.regs[{{regs.reg[1:]}}]
+{%- endif %}
+{%- endfor %}
+        pass
+
+{% endfor %}
+{% endfor %}
