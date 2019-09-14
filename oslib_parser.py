@@ -691,7 +691,10 @@ def describe_swi_regsdefs(swidef):
                 desc = 'constant ' + str(reg.name)
                 name = None
             elif reg.assign == '->':
-                desc = 'pointer to ' + reg.name
+                if reg.dtype == '.Asm':
+                    desc = 'pointer to code ' + reg.name
+                else:
+                    desc = 'pointer to ' + reg.name
                 name = reg.name
             elif reg.assign == '|':
                 desc = "OR " + reg.name
