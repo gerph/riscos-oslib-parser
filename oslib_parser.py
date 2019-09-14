@@ -693,6 +693,8 @@ def describe_swi_regsdefs(swidef):
             elif reg.assign == '->':
                 if reg.dtype == '.Asm':
                     desc = 'pointer to code ' + reg.name
+                elif reg.dtype == '.String':
+                    desc = 'pointer to string ' + reg.name
                 else:
                     desc = 'pointer to ' + reg.name
                 name = reg.name
