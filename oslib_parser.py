@@ -5,6 +5,8 @@ Parse an OSLib definition file.
 
 import argparse
 import datetime
+import functools
+import math
 import os
 import re
 import sys
@@ -52,12 +54,23 @@ class Member(object):
         self.array = array
 
 
+@functools.total_ordering
 class Constant(object):
 
     def __init__(self, name, dtype, value):
         self.name = name
         self.dtype = dtype
         self.value = value
+
+    def __eq__(self, other):
+        if not isinstance(other, Constant):
+            return NotImplemented
+        return self.value == other.value
+
+    def __lt__(self, other):
+        if not isinstance(other, Constant):
+            return NotImplemented
+        return self.value < other.value
 
 
 class Register(object):
@@ -882,6 +895,27 @@ def create_pymodule_template(defmods, filename):
                             })
 
 
+def create_pymodule_constants(defmods, filename):
+    template = Template(os.path.dirname(__file__))
+    def value_repr(value):
+        if value & (value - 1) == 0:
+            if value == 0:
+                bit = 0
+            else:
+                bit = int(math.log(value & ~(value - 1)) / math.log(2))
+            return '(1<<%i)' % (bit,)
+        else:
+            return value
+
+    template.render_to_file('pymodule_constants.py.j2', filename,
+                            {
+                                'now': now,
+                                'value_repr': value_repr,
+                                'timestamp': timestamp,
+                                'defmods': defmods
+                            })
+
+
 def setup_argparse():
     parser = argparse.ArgumentParser(usage="%s [<options>] <def-mod-file>" % (os.path.basename(sys.argv[0]),))
     parser.add_argument('--debug', action='store_true', default=False,
@@ -892,6 +926,8 @@ def setup_argparse():
                         help="File to write the SWI conditions into")
     parser.add_argument('--create-pymodule-template', action='store',
                         help="File to write a template for a pymodule implementation")
+    parser.add_argument('--create-pymodule-constants', action='store',
+                        help="File to write a constants for pyromaniac")
 
     return parser
 
@@ -919,6 +955,9 @@ def main():
 
     if options.create_pymodule_template:
         create_pymodule_template(all_defmods, options.create_pymodule_template)
+
+    if options.create_pymodule_constants:
+        create_pymodule_constants(all_defmods, options.create_pymodule_constants)
 
 
 if __name__ == '__main__':
