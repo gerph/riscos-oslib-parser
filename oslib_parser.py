@@ -898,9 +898,11 @@ def create_pymodule_template(defmods, filename):
 def create_pymodule_constants(defmods, filename):
     template = Template(os.path.dirname(__file__))
     def value_repr(value):
+        if isinstance(value, (tuple, list)):
+            value = value[0]
         if value & (value - 1) == 0:
             if value == 0:
-                bit = 0
+                return '0'
             else:
                 bit = int(math.log(value & ~(value - 1)) / math.log(2))
             return '(1<<%i)' % (bit,)
