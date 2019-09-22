@@ -49,19 +49,23 @@ class {{ defmod.name }}(PyModule):
 
     def __init__(self, ro, module):
         super({{ defmod.name }}, self).__init__(ro, module)
+        self.swi_dispatch = {
+{%- for swi, swilist in swis %}
+ {%- if not loop.last -%}
+  {%- set comma=',' -%}
+ {%- else -%}
+  {%- set comma='' -%}
+ {%- endif %}
+                {{ swi - swi_base }}: self.swi_{{ swilist[0].name|lower() }}{{ comma }}
+{%- endfor %}
+            }
 
 {%- if defmod.swis %}
 
     def swi(self, offset, regs):
-{%- for swi, swilist in swis %}
- {%- if loop.first -%}
-  {%- set cond='if' -%}
- {%- else -%}
-  {%- set cond='elif' -%}
- {%- endif %}
-        {{ cond }} offset == {{ swi - swi_base }}:
-            return self.swi_{{ swilist[0].name|lower() }}(regs)
-{%- endfor %}
+        func = self.swi_dispatch.get(offset, None)
+        if func:
+            return func(regs)
 
         return False
 
