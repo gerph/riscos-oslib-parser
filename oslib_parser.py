@@ -23,7 +23,8 @@ class ParseError(Exception):
 
 class Union(object):
 
-    def __init__(self):
+    def __init__(self, name=None):
+        self.name = name
         self.members = []
 
     def add_member(self, dtype):
@@ -39,7 +40,8 @@ class Array(object):
 
 class Struct(object):
 
-    def __init__(self):
+    def __init__(self, name=None):
+        self.name = name
         self.members = []
 
     def add_member(self, dtype):
@@ -315,11 +317,17 @@ class Statement(object):
         if tok == '.Ref':
             dtype = '&' + self.token()
         elif tok in ('.Struct', '.Union'):
+            tok = self.expect(('(', ':'))
+            name = None
+            if tok == ':':
+                name = self.token()
+                self.expect('(')
+
             if tok == '.Struct':
-                obj = Struct()
+                obj = Struct(name)
             else:
-                obj = Union()
-            self.expect('(')
+                obj = Union(name)
+
             while True:
                 # Each member consists of a type and a name
                 dtype = self.gettype()
