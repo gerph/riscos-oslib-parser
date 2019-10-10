@@ -22,7 +22,7 @@ class {{ defmod.name }}Constants(object):
 {%- endfor -%}
 {%- elif dtype.endswith('Flags') or dtype == '.Bits' -%}
 {%- for name, constant in constants|dictsort(False, 'value') %}
-    {{ name }} = {{ value_repr(constant.value) }}
+    {{ name }} = {{ value_repr(constant.value, name) }}
 {%- endfor -%}
 {%- else -%}
 {%- for name, constant in constants|dictsort(False, 'value') %}

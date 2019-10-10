@@ -149,6 +149,8 @@ class DefMod(object):
             print("Duplicate requirement of '%s'" % (need,))
         self.needs.append(need)
         # FIXME: Parse another DefMod file?
+        # Apparently defmod parser won't actually process any 'Need' directives beyond
+        # providing them as includes of types.
 
     def add_type(self, name, dtype):
         if name in self.types:
@@ -905,9 +907,12 @@ def create_pymodule_template(defmods, filename):
 
 def create_pymodule_constants(defmods, filename):
     template = Template(os.path.dirname(__file__))
-    def value_repr(value):
+    def value_repr(value, name):
         if isinstance(value, (tuple, list)):
             value = value[0]
+        if name.startswith(('Error_', 'Message_')) or name.endswith(('_FileType',)):
+            # These two are always formatted as Hex
+            return '0x%x' % (value,)
         if value & (value - 1) == 0:
             if value == 0:
                 return '0'
