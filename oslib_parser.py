@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Parse an OSLib definition file.
+Parse an OSLib definition file, and generate API and module definitions.
 """
 
 import argparse
@@ -905,6 +905,16 @@ def create_pymodule_template(defmods, filename):
                             })
 
 
+def create_api_template(defmods, filename):
+    template = Template(os.path.dirname(__file__))
+    template.render_to_file('pyro-api.py.j2', filename,
+                            {
+                                'now': now,
+                                'timestamp': timestamp,
+                                'defmods': defmods
+                            })
+
+
 def create_pymodule_constants(defmods, filename):
     template = Template(os.path.dirname(__file__))
     def value_repr(value, name):
@@ -943,6 +953,8 @@ def setup_argparse():
                         help="File to write a template for a pymodule implementation")
     parser.add_argument('--create-pymodule-constants', action='store',
                         help="File to write a constants for pyromaniac")
+    parser.add_argument('--create-api-template', action='store',
+                        help="File to write a template for an API of the Python ")
 
     return parser
 
@@ -973,6 +985,9 @@ def main():
 
     if options.create_pymodule_constants:
         create_pymodule_constants(all_defmods, options.create_pymodule_constants)
+
+    if options.create_api_template:
+        create_api_template(all_defmods, options.create_api_template)
 
 
 if __name__ == '__main__':
