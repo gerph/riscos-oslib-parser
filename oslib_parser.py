@@ -18,7 +18,15 @@ debug = False
 
 
 class ParseError(Exception):
-    pass
+
+    def __init__(self, message, lineno=None):
+        self.lineno = lineno
+        super(ParseError, self).__init__(message)
+
+    def __str__(self):
+        if self.lineno:
+            return "{} whilst processing line number {}".format(self.message, self.lineno)
+        return self.message
 
 
 class Union(object):
@@ -190,7 +198,7 @@ class DefMod(object):
 
 
 class Statement(object):
-    token_re = re.compile('^(\.?[A-Za-z_][A-Za-z_0-9]*|(?:&|0x)[0-9A-Fa-f]+|\.\.\.|%[01]+|0b[01]+|-?[0-9]+|[!\?:,\(\)=\|\[\]#\*\+]|->|"[^"]*"|\'[^\']*\')')
+    token_re = re.compile(r'^(\.?[A-Za-z_][A-Za-z_0-9]*|(?:&|0x)[0-9A-Fa-f]+|\.\.\.|%[01]+|0b[01]+|-?[0-9]+|[!\?:,\(\)=\|\[\]#\*\+]|->|"[^"]*"|\'[^\']*\')')
 
     def __init__(self, defmod, lines):
         self.lines = lines
@@ -316,8 +324,14 @@ class Statement(object):
             dtype = Array(dtype, elements)
             return dtype
 
-        if tok == '.Ref':
-            dtype = '&' + self.token()
+        refs = 0
+        while tok == '.Ref':
+            refs += 1
+            tok = self.token()
+
+        # FIXME: .Ref should be a container type
+        if refs:
+            dtype = ('&' * refs) + tok
         elif tok in ('.Struct', '.Union'):
             tok = self.expect(('(', ':'))
             name = None
@@ -604,43 +618,50 @@ def parse_file(filename, name=None):
         name = os.path.basename(filename).title()
 
     defmod = DefMod(name)
-    with open(filename) as fh:
-        accumulator = []
-        inquotes = False
-        for line in fh:
-            # Replace any hard spaces with regular spaces
-            line = line.replace('\xa0', ' ')
-            line = line.rstrip('\n')
-            if '//' in line:
-                before, after = line.split('//', 1)
-                line = before
-            while ';' in line:
-                before, after = line.split(';', 1)
-                quotes_present = len(before.split('"')) - 1
+    lineno = 0
+    try:
+        with open(filename) as fh:
+            accumulator = []
+            inquotes = False
+            for line in fh:
+                lineno += 1
+
+                # Replace any hard spaces with regular spaces
+                line = line.replace('\xa0', ' ')
+                line = line.rstrip('\n')
+                if '//' in line:
+                    before, after = line.split('//', 1)
+                    line = before
+                while ';' in line:
+                    before, after = line.split(';', 1)
+                    quotes_present = len(before.split('"')) - 1
+                    if quotes_present & 1:
+                        inquotes = not inquotes
+
+                    if inquotes:
+                        # This is a ; in a quoted string, so we need to just move it to the accumulator
+                        # so that we can skip it nicely.
+                        accumulator.append(before)
+                        line = after
+                        continue
+
+                    line = after
+                    accumulator.append(before)
+                    Statement(defmod, accumulator)
+                    accumulator = []
+
+                if line:
+                    accumulator.append(line)
+
+                quotes_present = len(line.split('"')) - 1
                 if quotes_present & 1:
                     inquotes = not inquotes
 
-                if inquotes:
-                    # This is a ; in a quoted string, so we need to just move it to the accumulator
-                    # so that we can skip it nicely.
-                    accumulator.append(before)
-                    line = after
-                    continue
-
-                line = after
-                accumulator.append(before)
-                Statement(defmod, accumulator)
-                accumulator = []
-
-            if line:
-                accumulator.append(line)
-
-            quotes_present = len(line.split('"')) - 1
-            if quotes_present & 1:
-                inquotes = not inquotes
-
-    if accumulator:
-        Statement(defmod, accumulator)
+        if accumulator:
+            Statement(defmod, accumulator)
+    except ParseError as exc:
+        exc.lineno = lineno
+        raise
 
     return defmod
 
@@ -975,7 +996,7 @@ def main():
             defmod = parse_file(defmodfile)
             all_defmods.append(defmod)
         except Exception as exc:
-            print("  Failed %s: %r" % (defmodfile, exc))
+            print("  Failed %s: %s: %s" % (defmodfile, exc.__class__.__name__, exc))
 
     if options.swi_conditions:
         write_all_swi_conditions(all_defmods, options.swi_conditions)
