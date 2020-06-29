@@ -542,10 +542,16 @@ class Statement(object):
                                     dtype = self.gettype()
                                     name = self.token()
 
-                        # There might be a comment on the register.
+                        # There might be a description on the register.
                         tok = self.token()
                         if tok[0] == '"':
-                            # Comment field present
+                            # Description field present.
+                            # We currently ignore.
+                            pass
+                        elif tok == '*':
+                            # Starred field means that the description for the SWI definition applies to
+                            # this constant (assuming it is a constant).
+                            # We currently ignore.
                             pass
                         else:
                             self.push_token(tok)
