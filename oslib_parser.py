@@ -981,7 +981,7 @@ def setup_argparse():
     parser.add_argument('--create-pymodule-constants', action='store',
                         help="File to write a constants for pyromaniac")
     parser.add_argument('--create-api-template', action='store',
-                        help="File to write a template for an API of the Python ")
+                        help="File to write a template for an API of the module")
 
     return parser
 
