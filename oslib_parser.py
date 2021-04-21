@@ -38,6 +38,11 @@ class Union(object):
     def add_member(self, dtype):
         self.members.append(dtype)
 
+    def __repr__(self):
+        return "<{}({}, members: {})>".format(self.__class__.__name__,
+                                              self.name,
+                                              ', '.join(str(x) for x in self.members))
+
 
 class Array(object):
 
@@ -45,12 +50,22 @@ class Array(object):
         self.dtype = dtype
         self.nelements = elements
 
+    def __repr__(self):
+        return "<{}({} x {})>".format(self.__class__.__name__,
+                                      self.nelements,
+                                      self.dtype)
+
 
 class Struct(object):
 
     def __init__(self, name=None):
         self.name = name
         self.members = []
+
+    def __repr__(self):
+        return "<{}({}, members: {})>".format(self.__class__.__name__,
+                                              self.name,
+                                              ', '.join(str(x) for x in self.members))
 
     def add_member(self, dtype):
         self.members.append(dtype)
@@ -62,6 +77,12 @@ class Member(object):
         self.dtype = dtype
         self.name = name
         self.array = array
+
+    def __repr__(self):
+        return "<{}({} {}, array: {})>".format(self.__class__.__name__,
+                                               self.dtype,
+                                               self.name,
+                                               self.array)
 
 
 @functools.total_ordering
@@ -321,6 +342,12 @@ class Statement(object):
             elements = self.token_group(']')
             # Recurse, because it could be an array of an array, etc.
             dtype = self.gettype(named=named)
+            if len(elements) == 1:
+                elements = elements[0]
+                try:
+                    elements = int(elements)
+                except ValueError:
+                    pass
             dtype = Array(dtype, elements)
             return dtype
 
@@ -333,13 +360,14 @@ class Statement(object):
         if refs:
             dtype = ('&' * refs) + tok
         elif tok in ('.Struct', '.Union'):
+            struct_tok = tok
             tok = self.expect(('(', ':'))
             name = None
             if tok == ':':
                 name = self.token()
                 self.expect('(')
 
-            if tok == '.Struct':
+            if struct_tok == '.Struct':
                 obj = Struct(name)
             else:
                 obj = Union(name)
@@ -928,7 +956,7 @@ def create_pymodule_template(defmods, filename):
                             {
                                 'now': now,
                                 'timestamp': timestamp,
-                                'defmods': defmods
+                                'defmods': defmods,
                             })
 
 
@@ -939,6 +967,20 @@ def create_api_template(defmods, filename):
                                 'now': now,
                                 'timestamp': timestamp,
                                 'defmods': defmods
+                            })
+
+
+def create_python_api_template(defmods, filename):
+    template = Template(os.path.dirname(__file__))
+    types = {}
+    for defmod in defmods:
+        types.update(defmod.types)
+    template.render_to_file('python-api.py.j2', filename,
+                            {
+                                'now': now,
+                                'timestamp': timestamp,
+                                'defmods': defmods,
+                                'types': types,
                             })
 
 
@@ -982,6 +1024,8 @@ def setup_argparse():
                         help="File to write a constants for pyromaniac")
     parser.add_argument('--create-api-template', action='store',
                         help="File to write a template for an API of the module")
+    parser.add_argument('--create-python-api-template', action='store',
+                        help="File to write a template for an API of the module")
 
     return parser
 
@@ -1015,6 +1059,9 @@ def main():
 
     if options.create_api_template:
         create_api_template(all_defmods, options.create_api_template)
+
+    if options.create_python_api_template:
+        create_python_api_template(all_defmods, options.create_python_api_template)
 
 
 if __name__ == '__main__':
