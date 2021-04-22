@@ -54,7 +54,7 @@ class {{ typename }}({{ "ctypes.Structure" if type.__class__.__name__ == 'Struct
 
 
 {%- macro extract_swi_name(swi) -%}
-{%- if swi.name.split('_') > 1 -%}
+{%- if swi.name.split('_')|length > 1 -%}
 {%- set parts = swi.name.split('_') -%}
 {{ parts[0] }}_{{ parts[1] }}
 {%- else -%}

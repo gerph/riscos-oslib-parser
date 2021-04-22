@@ -17,6 +17,15 @@ import time
 debug = False
 
 
+def open_ro(*args):
+    try:
+        # Python 3 format
+        return open(*args, encoding='latin-1')
+    except TypeError:
+        # Python 2, which will just be bytes
+        return open(*args)
+
+
 class ParseError(Exception):
 
     def __init__(self, message, lineno=None):
@@ -25,8 +34,8 @@ class ParseError(Exception):
 
     def __str__(self):
         if self.lineno:
-            return "{} whilst processing line number {}".format(self.message, self.lineno)
-        return self.message
+            return "{} whilst processing line number {}".format(self.args[0], self.lineno)
+        return self.args
 
 
 class Union(object):
@@ -654,7 +663,7 @@ def parse_file(filename, name=None):
     defmod = DefMod(name)
     lineno = 0
     try:
-        with open(filename) as fh:
+        with open_ro(filename) as fh:
             accumulator = []
             inquotes = False
             for line in fh:
@@ -937,7 +946,7 @@ class Template(object):
         @param template_vars: A dictionary of variables to process
         """
         content = self.render(template_name, template_vars)
-        with open(output, 'w') as f:
+        with open(output, 'wb') as f:
             print("Create %s" % (output,))
             f.write(content.encode("utf-8"))
 
