@@ -6,7 +6,7 @@ import ctypes
 from swi import swi
 
 {%- macro ctypes_name(dtype) -%}
- {%- if dtype in ('.Any', '.Asm') -%}
+ {%- if dtype in ('.Any', '.Asm', '&.Asm', '&Void', '&.Data') -%}
   ctypes.c_void_p
  {%- elif dtype == '.Bool' -%}
   ctypes.c_int
@@ -91,15 +91,16 @@ class {{ typename }}({{ "ctypes.Structure" if type.__class__.__name__ == 'Struct
 {%- endif -%}
 {%- endmacro -%}
 
-{%- macro register_return(reg) -%}
+{%- macro register_return(reg, index) -%}
+{%- set regref = "rout[" + index|string +"]" if index != -1 else "rout" -%}
 {%- if reg.assign == '->' -%}
  {%- if reg.dtype|lower == '.string' -%}
-  self.ro.memory[rout[{{ reg.reg[1:] }}]].string  # {{ reg.dtype }}
+  self.ro.memory[{{ regref }}].string  # {{ reg.dtype }}
  {%- else -%}
-  self.ro.memory[rout[{{ reg.reg[1:] }}]]  # {{ reg.dtype }}
+  self.ro.memory[{{ regref }}]]  # {{ reg.dtype }}
  {%- endif -%}
 {%- else -%}
- rout[{{ reg.reg[1:] }}]  # {{ reg.dtype }}
+ {{ regref }}  # {{ reg.dtype }}
 {%- endif -%}
 {%- endmacro %}
 
@@ -131,6 +132,18 @@ def {{ swi.name|lower }}(
 {%- endfor %}
 {%- else -%}
 {%- endif %}):
+
+{#- Prepare the output registers, stripping invisible elements -#}
+{%- set ns = namespace(exitregs=[]) -%}
+{%- for reg in swi.exit -%}
+ {%- if reg.name and reg.reg.startswith('R') -%}
+  {{ ns.exitregs.append(reg) or '' }}
+ {%- endif -%}
+{%- endfor -%}
+{%- set exitregs = ns.exitregs -%}
+
+
+{#- Function prologue comment #}
     """
 {%- if swi.description %}
     {{ swi.description }}
@@ -143,15 +156,24 @@ def {{ swi.name|lower }}(
   {%- endif %}
  {%- endfor %}
 {%- endif %}
-{%- if swi.exit %}
+{%- if exitregs -%}
+ {%- if exitregs|length == 1 %}
+
+    @return: {% else %}
 
     @return: Tuple of (
- {%- for reg in swi.exit -%}
+ {%- endif -%}
+ {%- for reg in exitregs -%}
   {{ '' if loop.first else ', ' }}{{ reg.name }}
  {%- endfor -%}
+ {%- if exitregs|length != 1 -%}
  )
+ {%- endif -%}
 {%- endif %}
     """
+
+
+{#- Register definition #}
 {%- if swi.entry %}
  {%- for reg in swi.entry %}
     # {{ '=>' if loop.first else '  ' }}  {{ register_definition(reg) }}
@@ -162,32 +184,38 @@ def {{ swi.name|lower }}(
     # {{ '<=' if loop.first else '  ' }}  {{ register_definition(reg) }}
  {%- endfor %}
 {%- endif %}
+
+{#- SWI call #}
     rout = swi({{ swi.number }},  # {{ extract_swi_name(swi) }}
                "
+{#- Register string -#}
 {%- if swi.entry -%}
- {%- set regnext = 0 -%}
+ {%- set ns = namespace(regnext=0) -%}
  {%- for reg in swi.entry -%}
-  {%- for _ in range(reg.reg[:1]|int - regnext)  -%}
+  {%- for _ in range(reg.reg[1:]|int - ns.regnext)  -%}
    .
-   {%- set regnext = regnext + 1 -%}
+   {%- set ns.regnext = ns.regnext + 1 -%}
   {%- endfor -%}
   {{ regstring_for_dtype(reg.dtype) }}
+  {%- set ns.regnext = ns.regnext + 1 -%}
  {%- endfor -%}
 {%- endif -%}
 
-{%- if swi.exit -%}
+{%- if exitregs -%}
  ;
- {%- set regnext = 0 -%}
- {%- for reg in swi.exit -%}
-  {%- for _ in range(reg.reg[:1]|int - regnext)  -%}
+ {%- set ns = namespace(regnext=0) -%}
+ {%- for reg in exitregs -%}
+  {%- for _ in range(reg.reg[1:]|int - ns.regnext)  -%}
    .
-   {%- set regnext = regnext + 1 -%}
+   {%- set ns.regnext = ns.regnext + 1 -%}
   {%- endfor -%}
   {{ regstring_for_dtype(reg.dtype) }}
+  {%- set ns.regnext = ns.regnext + 1 -%}
  {%- endfor -%}
 {%- endif -%}
 "
 
+{#- SWI input registers -#}
 {%- if swi.entry -%}
  {%- for reg in swi.entry -%}
   ,
@@ -198,23 +226,32 @@ def {{ swi.name|lower }}(
  )
 {%- endif %}
 
-{%- if swi.exit %}
- {%- for reg in swi.exit -%}
+
+{#- SWI output registers -#}
+{%- if exitregs %}
+ {%- for reg in exitregs -%}
   {%- if reg.name and reg.reg.startswith('R') %}
-    {{ reg.name }} = {{ register_return(reg) }}
-  {%- endif -%}
+    {{ reg.name }} = {{ register_return(reg, loop.index0 if exitregs|length != 1 else -1 ) }}
+{%- endif -%}
  {%- endfor %}
 {%- endif %}
 
-{%- if swi.exit %}
+
+{#- Return values -#}
+{%- if exitregs %}
+ {%- if exitregs|length == 1 %}
+
+    return {{ exitregs[0].name }}
+ {%- else %}
+
     return (
- {%- for reg in swi.exit -%}
-  {%- if reg.name and reg.reg.startswith('R') -%}
-   {{ '' if loop.first else ', ' }}{{ reg.name }}
-  {%- endif -%}
- {%- endfor -%}
- {%- if swi.exit|length == 1 -%},{%- endif -%}
- )
+  {%- for reg in exitregs -%}
+   {%- if reg.name and reg.reg.startswith('R') -%}
+    {{ '' if loop.first else ', ' }}{{ reg.name }}
+   {%- endif -%}
+  {%- endfor -%}
+  )
+ {%- endif -%}
 {%- endif %}
 {% endfor %}
 {% endfor %}
