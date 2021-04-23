@@ -124,14 +124,17 @@ class {{ typename }}({{ "ctypes.Structure" if type.__class__.__name__ == 'Struct
 
 def {{ swi.name|lower }}(
 {%- if swi.entry -%}
-{%- for reg in swi.entry -%}
-{%- if reg.assign != '#' -%}
-{%- if not loop.first -%},
+ {%- set ns = namespace(first=True) -%}
+ {%- for reg in swi.entry -%}
+  {%- if reg.assign != '#' -%}
+   {%- if not ns.first -%},
      {{ ' ' * swi.name|length }}
-{%- endif -%}
-{{reg.name}}
-{%- endif -%}
-{%- endfor %}
+   {%- else -%}
+    {%- set ns.first = False -%}
+   {%- endif -%}
+   {{reg.name}}
+  {%- endif -%}
+ {%- endfor %}
 {%- else -%}
 {%- endif %}):
 
@@ -194,12 +197,14 @@ def {{ swi.name|lower }}(
 {%- if swi.entry -%}
  {%- set ns = namespace(regnext=0) -%}
  {%- for reg in swi.entry -%}
-  {%- for _ in range(reg.reg[1:]|int - ns.regnext)  -%}
-   .
+  {%- if reg.assign != '|' -%}
+   {%- for _ in range(reg.reg[1:]|int - ns.regnext)  -%}
+    .
+    {%- set ns.regnext = ns.regnext + 1 -%}
+   {%- endfor -%}
+   {{ regstring_for_reg(reg) }}
    {%- set ns.regnext = ns.regnext + 1 -%}
-  {%- endfor -%}
-  {{ regstring_for_reg(reg) }}
-  {%- set ns.regnext = ns.regnext + 1 -%}
+  {%- endif -%}
  {%- endfor -%}
 {%- endif -%}
 
@@ -220,8 +225,12 @@ def {{ swi.name|lower }}(
 {#- SWI input registers -#}
 {%- if swi.entry -%}
  {%- for reg in swi.entry -%}
-  ,
+  {%- if reg.assign == '|' -%}
+   {{ ' | '  + reg.name }}
+  {%- else -%}
+   ,
                {{ reg.name }}
+  {%- endif -%}
  {%- endfor -%}
  )
 {%- else -%}
