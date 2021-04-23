@@ -106,10 +106,10 @@ class {{ typename }}({{ "ctypes.Structure" if type.__class__.__name__ == 'Struct
 {%- endif -%}
 {%- endmacro %}
 
-{%- macro regstring_for_dtype(dtype) -%}
-  {%- if dtype == '&.String' -%}
+{%- macro regstring_for_reg(reg) -%}
+  {%- if reg.dtype in ('.String', '&.Char') or (reg.dtype == '.Char' and reg.assign == '->') -%}
    s
-  {%- elif dtype in ('.Int', '.Short', '.Bool', '.Char', '.Byte') -%}
+  {%- elif reg.dtype in ('.Int', '.Short', '.Bool', '.Char', '.Byte') -%}
    i
   {%- else -%}
    I
@@ -198,7 +198,7 @@ def {{ swi.name|lower }}(
    .
    {%- set ns.regnext = ns.regnext + 1 -%}
   {%- endfor -%}
-  {{ regstring_for_dtype(reg.dtype) }}
+  {{ regstring_for_reg(reg) }}
   {%- set ns.regnext = ns.regnext + 1 -%}
  {%- endfor -%}
 {%- endif -%}
@@ -211,7 +211,7 @@ def {{ swi.name|lower }}(
    .
    {%- set ns.regnext = ns.regnext + 1 -%}
   {%- endfor -%}
-  {{ regstring_for_dtype(reg.dtype) }}
+  {{ regstring_for_reg(reg) }}
   {%- set ns.regnext = ns.regnext + 1 -%}
  {%- endfor -%}
 {%- endif -%}
