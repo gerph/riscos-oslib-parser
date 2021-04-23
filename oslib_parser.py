@@ -370,15 +370,15 @@ class Statement(object):
         # FIXME: .Ref should be a container type
         if refs:
             dtype = ('&' * refs) + tok
-        elif tok in ('.Struct', '.Union'):
-            struct_tok = tok
+        elif tok.upper() in ('.STRUCT', '.UNION'):
+            struct_tok = tok.upper()
             tok = self.expect(('(', ':'))
             name = None
             if tok == ':':
                 name = self.token()
                 self.expect('(')
 
-            if struct_tok == '.Struct':
+            if struct_tok == '.STRUCT':
                 obj = Struct(name)
             else:
                 obj = Union(name)
@@ -543,7 +543,7 @@ class Statement(object):
                 elif tok == 'ENTRY':
                     self.expect('(')
                     while True:
-                        reg = self.token()
+                        reg = self.token().upper()
                         if reg[0] != 'R' and reg != 'FLAGS':
                             raise ParseError("Entry register name not understood: %s" % (reg,))
                         if reg == 'FLAGS':
@@ -1056,6 +1056,8 @@ def main():
         try:
             defmod = parse_file(defmodfile)
             all_defmods.append(defmod)
+        except ParseError as exc:
+            raise
         except Exception as exc:
             print("  Failed %s: %s: %s" % (defmodfile, exc.__class__.__name__, exc))
 
