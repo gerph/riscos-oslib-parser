@@ -160,6 +160,8 @@ class SWI(object):
 class DefMod(object):
 
     def __init__(self, name):
+        if name.endswith('.Swi'):
+            name = name[:-4]
         self.name = name
         self.constants =  {}
         self.title = None

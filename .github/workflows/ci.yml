@@ -32,3 +32,18 @@ jobs:
         with:
           name: CPython
           path: artifacts/CPython/*
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: Constants
+          path: artifacts/Constants/*
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: PyModule
+          path: artifacts/PyModule/*
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: PyromaniacAPI
+          path: artifacts/PyromaniacAPI/*

@@ -68,6 +68,8 @@ class {{ typename }}({{ "ctypes.Structure" if type.__class__.__name__ == 'Struct
 {%- elif reg.assign == '#' -%}
   {%- if reg.name[0] == "'" -%}
     {{ reg.reg }} = {{ reg.name }} (constant word)
+  {%- elif reg.name|string|length > 2 and (reg.name[0] != 'R' or reg.name[1] not in '0123456789') -%}
+    {{ reg.reg }} = {{ reg.name }} (constant)
   {%- else -%}
     {{ reg.reg }} = {{ '&%x'|format(reg.name) }} (constant)
   {%- endif -%}
