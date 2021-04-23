@@ -116,6 +116,14 @@ class {{ typename }}({{ "ctypes.Structure" if type.__class__.__name__ == 'Struct
   {%- endif -%}
 {%- endmacro -%}
 
+{%- macro regvalue_for_reg(reg) -%}
+  {%- if (reg.dtype[0] == '&' and reg.dtype[1] != '.') or (reg.dtype[0] != '.' and reg.assign == '->') -%}
+   {{ reg.name }} if isinstance({{ reg.name }}, int) else ctypes.addressof({{ reg.name }})
+  {%- else -%}
+   {{ reg.name }}
+  {%- endif -%}
+{%- endmacro -%}
+
 
 {% for defmod in defmods %}
 ################# {{ defmod.name }} methods ######################################
@@ -226,10 +234,10 @@ def {{ swi.name|lower }}(
 {%- if swi.entry -%}
  {%- for reg in swi.entry -%}
   {%- if reg.assign == '|' -%}
-   {{ ' | '  + reg.name }}
+   {{ ' | '  + regvalue_for_reg(reg) }}
   {%- else -%}
    ,
-               {{ reg.name }}
+               {{ regvalue_for_reg(reg) }}
   {%- endif -%}
  {%- endfor -%}
  )
