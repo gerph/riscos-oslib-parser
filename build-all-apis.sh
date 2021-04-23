@@ -15,6 +15,8 @@ mkdir -p artifacts
 
 tmp=/tmp/oslib_parser.$$.log
 
+state=()
+
 OSLibSource=ro-oslib-code/!OSLib/Source
 
 artifactdir="artifacts/CPython"
@@ -36,6 +38,76 @@ for section in Computer Core User Toolbox ; do
     done
 done
 echo "--------"
-echo "Finished generating for CPython: Pass=$npass  Fail=$nfail"
+state+=("Finished generating for CPython: Pass=$npass  Fail=$nfail")
+
+
+artifactdir="artifacts/Constants"
+npass=0
+nfail=0
+for section in Computer Core User Toolbox ; do
+    # Build the constants
+    target="${artifactdir}/${section}"
+    mkdir -p "${target}"
+    for def in "${OSLibSource}/${section}/oslib/"*.swi ; do
+        name=$(basename "$def" .swi)
+        echo "+++ Processing ${section}/${name}"
+        if ! python oslib_parser.py $def --create-pymodule-constants "${target}/${name}.py" 2>&1 | tee "$tmp" ; then
+            mv "$tmp" "${target}/${name}-failed.log"
+            nfail=$((nfail + 1))
+        else
+            npass=$((npass + 1))
+        fi
+    done
+done
+echo "--------"
+state+=("Finished generating for constants: Pass=$npass  Fail=$nfail")
+
+
+artifactdir="artifacts/PyModule"
+npass=0
+nfail=0
+for section in Computer Core User Toolbox ; do
+    # Build the RISC OS Pyromaniac module stubs
+    target="${artifactdir}/${section}"
+    mkdir -p "${target}"
+    for def in "${OSLibSource}/${section}/oslib/"*.swi ; do
+        name=$(basename "$def" .swi)
+        echo "+++ Processing ${section}/${name}"
+        if ! python oslib_parser.py $def --create-pymodule-template "${target}/${name}.py" 2>&1 | tee "$tmp" ; then
+            mv "$tmp" "${target}/${name}-failed.log"
+            nfail=$((nfail + 1))
+        else
+            npass=$((npass + 1))
+        fi
+    done
+done
+echo "--------"
+state+=("Finished generating for PyModule stubs: Pass=$npass  Fail=$nfail")
+
+
+artifactdir="artifacts/PyromaniacAPI"
+npass=0
+nfail=0
+for section in Computer Core User Toolbox ; do
+    # Build the RISC OS Pyromaniac APIs
+    target="${artifactdir}/${section}"
+    mkdir -p "${target}"
+    for def in "${OSLibSource}/${section}/oslib/"*.swi ; do
+        name=$(basename "$def" .swi)
+        echo "+++ Processing ${section}/${name}"
+        if ! python oslib_parser.py $def --create-api-template "${target}/${name}.py" 2>&1 | tee "$tmp" ; then
+            mv "$tmp" "${target}/${name}-failed.log"
+            nfail=$((nfail + 1))
+        else
+            npass=$((npass + 1))
+        fi
+    done
+done
+echo "--------"
+state+=("Finished generating for Pyromaniac APIs: Pass=$npass  Fail=$nfail")
+
+for report in "${state[@]}" ; do
+    echo "$report"
+done
 
 rm -f "$tmp"
