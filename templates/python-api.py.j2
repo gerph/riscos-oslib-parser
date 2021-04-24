@@ -8,10 +8,14 @@ from swi import swi
 {%- set package_name = 'oslib' -%}
 
 {%- set ns=namespace(seen_needs=set()) -%}
-{%- for defmod in defmods %}
+{%- for defmod in defmods -%}
+ {%- if defmod.inctype != 'required' -%}
+  {%- continue -%}
+ {%- endif %}
+
 
 ################# {{ defmod.name }} includes ###################################
-{%- for need in defmod.needs -%}
+{% for need in defmod.needs -%}
     {%- if package_name not in ns.seen_needs %}
 import {{ package_name }}.{{ need|lower }}
 {{- ns.seen_needs.add(package_name) or '' -}}
@@ -44,7 +48,11 @@ import {{ package_name }}.{{ need|lower }}
  {%- else -%}
   {# It might be a type we can immediately dereference #}
   {%- if dtype in types -%}
-   {{ dtype }}
+   {%- if types[dtype].defmod.inctype == 'required' -%}
+    {{ dtype }}
+   {%- else -%}
+    {{ package_name }}.{{ types[dtype].defmod.modname }}.{{ dtype }}
+   {%- endif -%}
   {%- else -%}
    "unknown type {{ dtype }}"
   {%- endif -%}
@@ -52,11 +60,15 @@ import {{ package_name }}.{{ need|lower }}
 {%- endmacro -%}
 
 
-{%- for defmod in defmods %}
+{%- for defmod in defmods -%}
+ {%- if defmod.inctype != 'required' -%}
+  {%- continue -%}
+ {%- endif %}
 
 
 ################# {{ defmod.name }} types ######################################
-{% for typename, type in defmod.types.items()|sort -%}
+
+{% for typename, type in defmod.types.items() -%}
 {# Type: {{ typename }}  {{ type }} #}
 {%- if type.__class__.__name__ in ('Struct', 'Union') %}
 
@@ -150,6 +162,9 @@ class {{ typename }}({{ "ctypes.Structure" if type.__class__.__name__ == 'Struct
 
 
 {% for defmod in defmods %}
+ {%- if defmod.inctype != 'required' -%}
+  {%- continue -%}
+ {%- endif %}
 
 
 ################# {{ defmod.name }} methods ####################################
