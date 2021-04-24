@@ -160,7 +160,7 @@ class SWI(object):
 class DefMod(object):
 
     def __init__(self, name):
-        if name.endswith('.Swi'):
+        if name.endswith('.Swi') or name.endswith('/Swi'):
             name = name[:-4]
         self.name = name
         self.constants =  {}
@@ -996,8 +996,12 @@ def create_python_api_template(defmods, filename):
         types.update(defmod.types)
     template.render_to_file('python-api.py.j2', filename,
                             {
+                                # Functions
                                 'now': now,
                                 'timestamp': timestamp,
+                                'set': set,
+
+                                # Variables
                                 'defmods': defmods,
                                 'types': types,
                             })

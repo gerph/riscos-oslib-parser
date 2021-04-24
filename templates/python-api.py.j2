@@ -1,9 +1,24 @@
 """
-Python API template - probably needs modification before use.
+RISC OS Python OSLib API template - probably needs modification before use.
 """
 
 import ctypes
 from swi import swi
+
+{%- set package_name = 'oslib' -%}
+
+{%- set ns=namespace(seen_needs=set()) -%}
+{%- for defmod in defmods %}
+
+################# {{ defmod.name }} includes ###################################
+{%- for need in defmod.needs -%}
+    {%- if package_name not in ns.seen_needs %}
+import {{ package_name }}.{{ need|lower }}
+{{- ns.seen_needs.add(package_name) or '' -}}
+    {%- endif -%}
+{%- endfor -%}
+{%- endfor -%}
+
 
 {%- macro ctypes_name(dtype) -%}
  {%- if dtype in ('.Any', '.Asm', '&.Asm', '&Void', '&.Data') -%}
@@ -37,19 +52,26 @@ from swi import swi
 {%- endmacro -%}
 
 
-{% for typename, type in types.items()|sort %}
+{%- for defmod in defmods %}
+
+
+################# {{ defmod.name }} types ######################################
+{% for typename, type in defmod.types.items()|sort -%}
 {# Type: {{ typename }}  {{ type }} #}
-{% if type.__class__.__name__ in ('Struct', 'Union') -%}
+{%- if type.__class__.__name__ in ('Struct', 'Union') %}
+
+
 class {{ typename }}({{ "ctypes.Structure" if type.__class__.__name__ == 'Struct' else "ctypes.Union" }}):
     _fields_ = [
 {%- for member in type.members %}
             ("{{ member.name }}", {{ ctypes_name(member.dtype) }}), {#- {{ member.dtype }} #}
 {%- endfor %}
         ]
-{%- elif type.__class__.__name__ == 'str' and type[0] == '.' -%}
+{%- elif type.__class__.__name__ == 'str' and type[0] == '.' %}
 {{ typename }} = {{ ctypes_name(type) }}
-{%- endif %}
-{% endfor %}
+{%- endif -%}
+{%- endfor -%}
+{%- endfor -%}
 
 
 
@@ -128,9 +150,10 @@ class {{ typename }}({{ "ctypes.Structure" if type.__class__.__name__ == 'Struct
 
 
 {% for defmod in defmods %}
-################# {{ defmod.name }} methods ######################################
-{%- for name, swi in defmod.interfaces.items()|sort %}
 
+
+################# {{ defmod.name }} methods ####################################
+{%- for name, swi in defmod.interfaces.items()|sort %}
 
 def {{ swi.name|lower }}(
 {%- if swi.entry -%}
