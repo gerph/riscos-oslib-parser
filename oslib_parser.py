@@ -918,7 +918,7 @@ def write_swi_conditions(swis, fh):
             fh.write("%s 'exit': {%s}}],\n" % (indent, ", ".join(exit_reglist)))
 
 
-class Template(object):
+class Templates(object):
 
     def __init__(self, path):
         import jinja2
@@ -953,6 +953,14 @@ class Template(object):
             f.write(content.encode("utf-8"))
 
 
+class LocalTemplates(Templates):
+
+    def __init__(self, path=None):
+        here = os.path.dirname(__file__)
+        if path:
+            here = os.path.join(here, path)
+        super(LocalTemplates, self).__init__(here)
+
 def now():
     return time.time()
 
@@ -962,7 +970,7 @@ def timestamp(epochtime, time_format="%Y-%m-%d %H:%M:%S"):
 
 
 def create_pymodule_template(defmods, filename):
-    template = Template(os.path.dirname(__file__))
+    template = LocalTemplates('templates')
     template.render_to_file('pymodule.py.j2', filename,
                             {
                                 'now': now,
@@ -972,7 +980,7 @@ def create_pymodule_template(defmods, filename):
 
 
 def create_api_template(defmods, filename):
-    template = Template(os.path.dirname(__file__))
+    template = LocalTemplates('templates')
     template.render_to_file('pyro-api.py.j2', filename,
                             {
                                 'now': now,
@@ -982,7 +990,7 @@ def create_api_template(defmods, filename):
 
 
 def create_python_api_template(defmods, filename):
-    template = Template(os.path.dirname(__file__))
+    template = LocalTemplates('templates')
     types = {}
     for defmod in defmods:
         types.update(defmod.types)
@@ -996,7 +1004,7 @@ def create_python_api_template(defmods, filename):
 
 
 def create_pymodule_constants(defmods, filename):
-    template = Template(os.path.dirname(__file__))
+    template = LocalTemplates('templates')
     def value_repr(value, name):
         if isinstance(value, (tuple, list)):
             value = value[0]
