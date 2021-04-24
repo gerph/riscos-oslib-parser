@@ -97,9 +97,9 @@ class {{ typename }}({{ "ctypes.Structure" if type.__class__.__name__ == 'Struct
 {%- set regref = "rout[" + index|string +"]" if index != -1 else "rout" -%}
 {%- if reg.assign == '->' -%}
  {%- if reg.dtype|lower == '.string' -%}
-  self.ro.memory[{{ regref }}].string  # {{ reg.dtype }}
+  ctypes.string_at({{ regref }})  # {{ reg.dtype }}
  {%- else -%}
-  self.ro.memory[{{ regref }}]]  # {{ reg.dtype }}
+  {{reg.dtype}}.from_address({{ regref }})
  {%- endif -%}
 {%- else -%}
  {{ regref }}  # {{ reg.dtype }}
