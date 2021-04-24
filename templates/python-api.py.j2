@@ -151,7 +151,9 @@ class {{ typename }}({{ "ctypes.Structure" if type.__class__.__name__ == 'Struct
 {%- endmacro -%}
 
 {%- macro regvalue_for_reg(reg) -%}
-  {%- if (reg.dtype[0] == '&' and reg.dtype[1] != '.') or (reg.dtype[0] != '.' and reg.assign == '->') -%}
+  {%- if (   (reg.dtype[0] == '&' and reg.dtype[1] != '.')
+          or (reg.dtype[0] != '.' and reg.assign == '->'))
+         and (reg.dtype in types and types[reg.dtype].dtype[0] in ('.Int', '.Short', '.Bool', '.Char', '.Byte')) -%}
    {{ reg.name }} if isinstance({{ reg.name }}, int) else ctypes.addressof({{ reg.name }})
   {%- elif reg.dtype == '.Bool' -%}
    1 if {{ reg.name }} else 0
