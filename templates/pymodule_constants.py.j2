@@ -2,34 +2,13 @@
 Python constants.
 """
 
-{% for defmod in defmods -%}
+{%- from "lib_constants_py.j2" import defmod_constants with context -%}
+
+{%- for defmod in defmods -%}
+ {%- if defmod.inctype != 'required' -%}
+  {%- continue -%}
+ {%- endif %}
+
 class {{ defmod.name }}Constants(object):
-{% set typelist = {} %}
-{%- for name, constant in defmod.constants.items()|sort %}
-{%- if constant.dtype in typelist -%}
-{{ typelist[constant.dtype].update({name: constant}) or '' }}
-{%- else -%}
-{{ typelist.update({constant.dtype: {name: constant}}) or '' }}
-{%- endif -%}
-
-{%- endfor %}
-
-{%- for dtype, constants in typelist.items()|sort %}
-    # {{ dtype }}
-{%- if dtype == '.Int' -%}
-{%- for name, constant in constants.items()|sort %}
-    {{ name }} = {{ constant.value }}
-{%- endfor -%}
-{%- elif dtype.endswith('Flags') or dtype == '.Bits' -%}
-{%- for name, constant in constants|dictsort(False, 'value') %}
-    {{ name }} = {{ value_repr(constant.value, name) }}
-{%- endfor -%}
-{%- else -%}
-{%- for name, constant in constants|dictsort(False, 'value') %}
-    {{ name }} = {{ constant.value }}
-{%- endfor -%}
-{%- endif %}
-{% endfor %}
-
-
-{% endfor %}
+{{- defmod_constants(defmod, '    ') }}
+{% endfor -%}

@@ -110,7 +110,13 @@ class Constant(object):
     def __lt__(self, other):
         if not isinstance(other, Constant):
             return NotImplemented
-        return self.value < other.value
+        a = self.value
+        b = other.value
+        if isinstance(a, list):
+            a = a[0]
+        if isinstance(b, list):
+            b = b[0]
+        return a < b
 
 
 class Register(object):
@@ -924,6 +930,38 @@ def write_swi_conditions(swis, fh):
             fh.write("%s 'exit': {%s}}],\n" % (indent, ", ".join(exit_reglist)))
 
 
+def now():
+    return time.time()
+
+
+def timestamp(epochtime, time_format="%Y-%m-%d %H:%M:%S"):
+    return datetime.datetime.fromtimestamp(epochtime).strftime(time_format)
+
+
+def value_repr(value, name):
+    if isinstance(value, (tuple, list)):
+        value = value[0]
+    if name.startswith(('Error_', 'Message_')) or name.endswith(('_FileType',)):
+        # These two are always formatted as Hex
+        return '0x%x' % (value,)
+    if value & (value - 1) == 0:
+        if value == 0:
+            return '0'
+        else:
+            bit = int(math.log(value & ~(value - 1)) / math.log(2))
+        return '(1<<%i)' % (bit,)
+    else:
+        return value
+
+
+jinja2_functions = {
+        'now': now,
+        'timestamp': timestamp,
+        'value_repr': value_repr,
+        'set': set,
+    }
+
+
 class Templates(object):
 
     def __init__(self, path):
@@ -954,7 +992,9 @@ class Templates(object):
         @param output:        The output filename
         @param template_vars: A dictionary of variables to process
         """
-        content = self.render(template_name, template_vars)
+        jinja2_vars = dict(template_vars)
+        jinja2_vars.update(jinja2_functions)
+        content = self.render(template_name, jinja2_vars)
         with open(output, 'wb') as f:
             print("Create %s" % (output,))
             f.write(content.encode("utf-8"))
@@ -968,20 +1008,11 @@ class LocalTemplates(Templates):
             here = os.path.join(here, path)
         super(LocalTemplates, self).__init__(here)
 
-def now():
-    return time.time()
-
-
-def timestamp(epochtime, time_format="%Y-%m-%d %H:%M:%S"):
-    return datetime.datetime.fromtimestamp(epochtime).strftime(time_format)
-
 
 def create_pymodule_template(defmods, filename):
     template = LocalTemplates('templates')
     template.render_to_file('pymodule.py.j2', filename,
                             {
-                                'now': now,
-                                'timestamp': timestamp,
                                 'defmods': defmods,
                             })
 
@@ -990,8 +1021,6 @@ def create_api_template(defmods, filename):
     template = LocalTemplates('templates')
     template.render_to_file('pyro-api.py.j2', filename,
                             {
-                                'now': now,
-                                'timestamp': timestamp,
                                 'defmods': defmods
                             })
 
@@ -1000,12 +1029,6 @@ def create_python_api_template(defmods, filename):
     template = LocalTemplates('templates')
     template.render_to_file('python-api.py.j2', filename,
                             {
-                                # Functions
-                                'now': now,
-                                'timestamp': timestamp,
-                                'set': set,
-
-                                # Variables
                                 'defmods': defmods,
                                 'types': defmods.types,
                             })
@@ -1013,26 +1036,8 @@ def create_python_api_template(defmods, filename):
 
 def create_pymodule_constants(defmods, filename):
     template = LocalTemplates('templates')
-    def value_repr(value, name):
-        if isinstance(value, (tuple, list)):
-            value = value[0]
-        if name.startswith(('Error_', 'Message_')) or name.endswith(('_FileType',)):
-            # These two are always formatted as Hex
-            return '0x%x' % (value,)
-        if value & (value - 1) == 0:
-            if value == 0:
-                return '0'
-            else:
-                bit = int(math.log(value & ~(value - 1)) / math.log(2))
-            return '(1<<%i)' % (bit,)
-        else:
-            return value
-
     template.render_to_file('pymodule_constants.py.j2', filename,
                             {
-                                'now': now,
-                                'value_repr': value_repr,
-                                'timestamp': timestamp,
                                 'defmods': defmods
                             })
 

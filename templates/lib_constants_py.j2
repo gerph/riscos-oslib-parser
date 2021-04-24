@@ -1,0 +1,34 @@
+{# Constants definitions for Python#}
+
+{% macro defmod_constants(defmod, indent) %}
+
+{%- set typelist = {} -%}
+{%- for name, constant in defmod.constants.items()|sort %}
+{%- if constant.dtype in typelist -%}
+{{ typelist[constant.dtype].update({name: constant}) or '' }}
+{%- else -%}
+{{ typelist.update({constant.dtype: {name: constant}}) or '' }}
+{%- endif -%}
+
+{%- endfor -%}
+
+{%- for dtype, constants in typelist.items()|sort %}
+
+{{ indent }}# {{ dtype }}
+{%- if dtype == '.Int' -%}
+{%- for name, constant in constants.items()|sort %}
+{{ indent }}{{ name }} = {{ constant.value }}
+{%- endfor -%}
+{%- elif dtype.endswith('Flags') or dtype == '.Bits' -%}
+{%- for name, constant in constants|dictsort(False, 'value') %}
+{{ indent }}{{ name }} = {{ value_repr(constant.value, name) }}
+{%- endfor -%}
+{%- else -%}
+{%- for name, constant in constants|dictsort(False, 'value') %}
+{{ indent }}{{ name }} = {{ constant.value }}
+{%- endfor -%}
+{%- endif %}
+{%- endfor %}
+
+
+{%- endmacro -%}
