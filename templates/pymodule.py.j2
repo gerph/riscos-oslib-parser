@@ -26,12 +26,25 @@ class {{ defmod.name }}(PyModule):
     date = '{{ timestamp(now(), "%d %b %Y") }}'
 {%- set swis = [] -%}
 {%- if defmod.swis %}
-{%- set swis = defmod.swis|dictsort()|list() %}
-{%- for swi in swis|list() -%}
+{%- set swis = defmod.modswis|dictsort()|list() %}
+{%- for swi in swis -%}
   {%- if swi[0] < 512 and not defmod.name.lower().startswith('os') -%}
     {{ swis.remove(swi) or '' }}
   {%- endif -%}
 {%- endfor -%}
+{# Ensure that the SWIs that are listed have gaps #}
+{%- set gapped_swis = [] -%}
+{%- for swi in swis -%}
+  {%- set last_swinum = gapped_swis[-1][0] if (gapped_swis|length) else -1 -%}
+  {%- if last_swinum != -1 and swi[0] != last_swinum + 1 -%}
+    {# Need to insert a gap #}
+    {%- for n in range(swi[0] - (last_swinum + 1)) -%}
+      {{ gapped_swis.append((last_swinum + 1 + n, [])) or '' }}
+    {%- endfor -%}
+  {%- endif -%}
+  {{ gapped_swis.append(swi) or '' }}
+{%- endfor -%}
+{%- set swis = gapped_swis -%}
 {%- endif -%}
 {%- if swis %}
 {%- set first_swi = swis[0][1] %}
@@ -39,8 +52,12 @@ class {{ defmod.name }}(PyModule):
     swi_base = 0x{{ '%x'|format(swi_base) }}
     swi_prefix = "{{ first_swi[0].name.split('_')[0] }}"
     swi_names = [
-{%- for swi, swilist in swis %}
+{%- for swi, swilist in swis -%}
+    {%- if swilist|length %}
             "{{ swilist[0].name.split('_', 1)[1] }}",
+    {%- else %}
+            "{{ swi - swi_base }}",
+    {%- endif -%}
 {%- endfor %}
         ]
 {%- else %}
@@ -56,7 +73,9 @@ class {{ defmod.name }}(PyModule):
  {%- else -%}
   {%- set comma='' -%}
  {%- endif %}
+ {%- if swilist|length %}
                 {{ swi - swi_base }}: self.swi_{{ swilist[0].name|lower() }}{{ comma }}
+ {%- endif %}
 {%- endfor %}
             }
 
@@ -70,6 +89,7 @@ class {{ defmod.name }}(PyModule):
         return False
 
 {%- for swi, swilist in swis %}
+ {%- if swilist|length %}
 {% set baseswi = swilist[0] %}
     def swi_{{ swilist[0].name|lower() }}(self, regs):
         """
@@ -109,6 +129,7 @@ class {{ defmod.name }}(PyModule):
 {%- endif %}
 {%- endfor %}
         return False
+{%- endif %}
 {%- endfor %}
 {%- endif %}
 

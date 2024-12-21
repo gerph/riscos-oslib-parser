@@ -157,9 +157,10 @@ class DefMod(object):
         self.types = {}
         self.needs = []
         self.types = {}
-        self.swis = {}
+        self.swis = {}  # All of the SWI definitions
         self.interfaces = {}
         # Special cases of swis (the entries are also in SWIs):
+        self.modswis = {}  # Just the SWIs for this module
         self.vectors = {}
         self.services = {}
         self.events = {}
@@ -204,18 +205,18 @@ class DefMod(object):
             swi.name = "OS_CallVector_" + swi.name
             swilist = self.vectors
         else:
-            swilist = self.swis
+            swilist = self.modswis
 
         if swi.number in swilist:
             swilist[swi.number].append(swi)
         else:
             swilist[swi.number] = [swi]
-        if swilist is not self.swis:
-            swilist = self.swis
-            if swi.number in swilist:
-                swilist[swi.number].append(swi)
-            else:
-                swilist[swi.number] = [swi]
+
+        swilist = self.swis
+        if swi.number in swilist:
+            swilist[swi.number].append(swi)
+        else:
+            swilist[swi.number] = [swi]
 
 
 class Statement(object):
