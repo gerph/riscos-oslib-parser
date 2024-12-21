@@ -110,7 +110,13 @@ class Constant(object):
     def __lt__(self, other):
         if not isinstance(other, Constant):
             return NotImplemented
-        return self.value < other.value
+        a = self.value
+        b = other.value
+        if isinstance(a, list):
+            a = a[0]
+        if isinstance(b, list):
+            b = b[0]
+        return a < b
 
 
 class Register(object):
@@ -122,6 +128,14 @@ class Register(object):
         self.name = name
         self.update = update
         self.corrupted = corrupted
+
+    def copy(self):
+        return Register(self.reg,
+                        self.assign,
+                        self.dtype,
+                        self.name,
+                        self.update,
+                        self.corrupted)
 
     def __repr__(self):
         return "<Register(%s %s %s: %s)>" % (self.reg, self.assign, self.dtype, self.name)
@@ -359,6 +373,12 @@ class Statement(object):
             elements = self.token_group(']')
             # Recurse, because it could be an array of an array, etc.
             dtype = self.gettype(named=named)
+            if len(elements) == 1:
+                elements = elements[0]
+                try:
+                    elements = int(elements)
+                except ValueError:
+                    pass
             dtype = Array(dtype, elements)
             return dtype
 
@@ -1199,7 +1219,7 @@ class DefMods(object):
 
 
 def setup_argparse():
-    parser = argparse.ArgumentParser(usage="%s [<options>] <def-mod-file>" % (os.path.basename(sys.argv[0]),))
+    parser = argparse.ArgumentParser(usage="%s [<options>] <def-mod-file>*" % (os.path.basename(sys.argv[0]),))
     parser.add_argument('--debug', action='store_true', default=False,
                         help="Enable debugging")
     parser.add_argument('files', nargs="+",
@@ -1211,9 +1231,9 @@ def setup_argparse():
     parser.add_argument('--create-message-details', action='store',
                         help="File to write the Wimp message details into")
     parser.add_argument('--create-pymodule-template', action='store',
-                        help="File to write a template for a pymodule implementation")
+                        help="File to write a template for a RISC OS Pyromaniac module")
     parser.add_argument('--create-pymodule-constants', action='store',
-                        help="File to write a constants for pyromaniac")
+                        help="File to write a constants file for RISC OS Pyromaniac")
     parser.add_argument('--create-api-template', action='store',
                         help="File to write a template for an API of the module")
     parser.add_argument('--create-python-api-template', action='store',
