@@ -27,8 +27,8 @@ class {{ defmod.name }}(PyModule):
 {%- set swis = [] -%}
 {%- if defmod.swis %}
 {%- set swis = defmod.modswis|dictsort()|list() %}
-{%- for swi in swis -%}
-  {%- if swi[0] < 512 and not defmod.name.lower().startswith('os') -%}
+{%- for swi in swis|list() -%}
+  {%- if (swi[0] < 512 and not defmod.name.lower().startswith('os')) or swi[1][0].hidden -%}
     {{ swis.remove(swi) or '' }}
   {%- endif -%}
 {%- endfor -%}
