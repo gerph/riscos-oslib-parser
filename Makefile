@@ -17,6 +17,7 @@ SWI_FILES = ${OSLIB_SOURCES}/Core/oslib/*.swi \
 all: \
 	${OUTPUT}/swi_conditions.py \
 	${OUTPUT}/nvram_constants.py \
+	${OUTPUT}/wimp_messages.py \
 	pymodules-templates \
 	pymodules-constants \
 	pyromaniac-apis \
@@ -35,6 +36,9 @@ ${OUTPUT}/swi_conditions.py: oslib dirs
 
 ${OUTPUT}/nvram_constants.py: oslib dirs
 	python oslib_parser.py --create-nvram-constants $@ ${SWI_FILES}
+
+${OUTPUT}/wimp_messages.py: oslib dirs
+	python oslib_parser.py --create-message-details $@ ${SWI_FILES}
 
 pymodules-templates:
 	mkdir -p ${OUTPUT}/pymodule-templates

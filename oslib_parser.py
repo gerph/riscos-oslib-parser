@@ -1000,6 +1000,13 @@ class LocalTemplates(Templates):
         super(LocalTemplates, self).__init__(here)
 
 
+def create_message_details(defmods, filename):
+    template = LocalTemplates('templates')
+    template.render_to_file('messages.py.j2', filename,
+                            {
+                                'defmods': defmods,
+                            })
+
 
 def create_pymodule_template(defmods, filename):
     template = LocalTemplates('templates')
@@ -1201,6 +1208,8 @@ def setup_argparse():
                         help="Directory holding OSLib files")
     parser.add_argument('--swi-conditions', action='store',
                         help="File to write the SWI conditions into")
+    parser.add_argument('--create-message-details', action='store',
+                        help="File to write the Wimp message details into")
     parser.add_argument('--create-pymodule-template', action='store',
                         help="File to write a template for a pymodule implementation")
     parser.add_argument('--create-pymodule-constants', action='store',
@@ -1242,6 +1251,9 @@ def main():
 
     if options.swi_conditions:
         write_all_swi_conditions(defmods, options.swi_conditions)
+
+    if options.create_message_details:
+        create_message_details(defmods, options.create_message_details)
 
     if options.create_pymodule_template:
         create_pymodule_template(defmods, options.create_pymodule_template)

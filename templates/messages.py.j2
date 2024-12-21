@@ -1,0 +1,63 @@
+"""
+RISC OS Wimp message formats
+"""
+
+{%- for defmod in defmods -%}
+ {%- if defmod.inctype != 'required' -%}
+  {%- continue -%}
+ {%- endif %}
+
+################# {{ defmod.name }} messages ###################################
+
+{%- macro ctypes_name(dtype) -%}
+ {%- if dtype in ('.Any', '.Asm', '&.Asm', '&Void', '&.Data') -%}
+  ctypes.c_void_p
+ {%- elif dtype == '.Bool' -%}
+  ctypes.c_int
+ {%- elif dtype == '.Int' -%}
+  ctypes.c_int
+ {%- elif dtype == '.Short' -%}
+  ctypes.c_int16
+ {%- elif dtype == '.Bits' -%}
+  ctypes.c_uint
+ {%- elif dtype == '.Char' -%}
+  ctypes.c_char
+ {%- elif dtype == '.Byte' -%}
+  ctypes.c_byte
+ {%- elif dtype == '&.String' -%}
+  ctypes.c_char_p
+ {%- elif dtype.__class__.__name__ in ('Array') -%}
+  {{ ctypes_name(dtype.dtype) }} * {{ dtype.nelements }}
+ {%- elif dtype.__class__.__name__ in ('Union', 'Struct') -%}
+  {{ dtype.name or "<unknown name of a " + dtype.__class__.__name__ + ">" }}
+ {%- else -%}
+  {# It might be a type we can immediately dereference #}
+  {%- if dtype in types -%}
+   {%- if types[dtype].defmod.inctype == 'required' -%}
+    {{ dtype }}
+   {%- else -%}
+    {{ package_name }}.{{ types[dtype].defmod.modname }}.{{ dtype }}
+   {%- endif -%}
+  {%- else -%}
+   "unknown type {{ dtype }}"
+  {%- endif -%}
+ {%- endif -%}
+{%- endmacro -%}
+
+{% for typename, type in defmod.types.items() -%}
+{# Type: {{ typename }}  {{ type }} #}
+{%- if type.__class__.__name__ in ('Struct', 'Union') %}
+
+
+class {{ typename }}({{ "ctypes.Structure" if type.__class__.__name__ == 'Struct' else "ctypes.Union" }}):
+    _fields_ = [
+{%- for member in type.members %}
+            ("{{ member.name }}", {{ ctypes_name(member.dtype) }}), {#- {{ member.dtype }} #}
+{%- endfor %}
+        ]
+{%- elif type.__class__.__name__ == 'str' and type[0] == '.' %}
+{{ typename }} = {{ ctypes_name(type) }}
+{%- endif -%}
+{%- endfor -%}
+
+{% endfor %}
