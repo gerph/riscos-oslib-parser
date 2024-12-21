@@ -17,6 +17,15 @@ import time
 debug = False
 
 
+def open_ro(*args):
+    try:
+        # Python 3 format
+        return open(*args, encoding='latin-1')
+    except TypeError:
+        # Python 2, which will just be bytes
+        return open(*args)
+
+
 class ParseError(Exception):
 
     def __init__(self, message, lineno=None):
@@ -150,8 +159,15 @@ class SWI(object):
 
 class DefMod(object):
 
-    def __init__(self, name):
+    def __init__(self, name, modname=None, inctype='required'):
+        modname = modname.lower()
+        if name.endswith('.Swi') or name.endswith('/Swi'):
+            name = name[:-4]
+        if modname.endswith('.swi') or modname.endswith('/swi'):
+            modname = modname[:-4]
         self.name = name
+        self.modname = modname or self.name
+        self.inctype = inctype
         self.constants =  {}
         self.title = None
         self.types = {}
@@ -354,14 +370,15 @@ class Statement(object):
         # FIXME: .Ref should be a container type
         if refs:
             dtype = ('&' * refs) + tok
-        elif tok in ('.Struct', '.Union'):
+        elif tok.upper() in ('.STRUCT', '.UNION'):
+            struct_tok = tok.upper()
             tok = self.expect(('(', ':'))
             name = None
             if tok == ':':
                 name = self.token()
                 self.expect('(')
 
-            if tok == '.Struct':
+            if struct_tok == '.STRUCT':
                 obj = Struct(name)
             else:
                 obj = Union(name)
@@ -643,14 +660,15 @@ class Statement(object):
                 break
 
 
-def parse_file(filename, name=None):
+def parse_file(filename, name=None, inctype='required'):
     if name is None:
         name = os.path.basename(filename).title()
 
-    defmod = DefMod(name)
+    defmod = DefMod(name, modname=name.lower(), inctype=inctype)
+
     lineno = 0
     try:
-        with open(filename) as fh:
+        with open_ro(filename) as fh:
             accumulator = []
             inquotes = False
             for line in fh:
@@ -1007,12 +1025,99 @@ def create_pymodule_constants(defmods, filename):
                             })
 
 
+class DefMods(object):
+    sections = [
+            'Core',
+            'Computer',
+            'Toolbox',
+            'User',
+        ]
+
+    def __init__(self, basedir=None):
+        self.basedir = basedir
+        self.found_defmods = None
+        self.defmods = []
+        self.modnames = {}
+        self._all_types = None
+
+    def __repr__(self):
+        return "<{}({} defmods)>".format(self.__class__.__name__,
+                                         len(self.defmods))
+
+    def __len__(self):
+        return len(self.defmods)
+
+    def __iter__(self):
+        return iter(self.defmods)
+
+    def __getitem__(self, index):
+        return self.defmods[index]
+
+    def _collect(self):
+        """
+        Find all the the the defmod files, which we can import.
+        """
+        if self.found_defmods is None:
+            self.found_defmods = {}
+            if self.basedir:
+                for section in self.sections:
+                    # Modern oslib
+                    path = os.path.join(self.basedir, section, 'oslib')
+                    if os.path.isdir(path):
+                        for leafname in os.listdir(path):
+                            filename = os.path.join(path, leafname)
+                            if filename.endswith('.swi'):
+                                modname = leafname[:-4].lower()
+                                self.found_defmods[modname] = filename
+
+                    # Ancient oslib
+                    path = os.path.join(self.basedir, section, 'defs')
+                    if os.path.isdir(path):
+                        for leafname in os.listdir(path):
+                            filename = os.path.join(path, leafname)
+                            modname = leafname.lower()
+                            self.found_defmods[modname] = filename
+
+    def resolve(self, name):
+        self._collect()
+        return self.found_defmods.get(name, None)
+
+    def add(self, defmodfile, inctype='required'):
+        defmod = parse_file(defmodfile, inctype=inctype)
+        self.defmods.append(defmod)
+        self.modnames[defmod.modname] = defmod
+
+        for need in defmod.needs:
+            need = need.lower()
+            if need not in self.modnames:
+                filename = self.resolve(need)
+                if debug:
+                    print("Resolve %s gave %s" % (need, filename))
+                if filename:
+                    self.add(filename, inctype='include')
+
+        # Clear the cache
+        self._all_types = None
+
+    @property
+    def types(self):
+        if self._all_types is None:
+            self._all_types = {}
+            for defmod in self.defmods:
+                types = dict((name, TypeRef(name=name, dtype=dtype, defmod=defmod)) for name, dtype in defmod.types.items())
+                self._all_types.update(types)
+
+        return self._all_types
+
+
 def setup_argparse():
     parser = argparse.ArgumentParser(usage="%s [<options>] <def-mod-file>" % (os.path.basename(sys.argv[0]),))
     parser.add_argument('--debug', action='store_true', default=False,
                         help="Enable debugging")
     parser.add_argument('files', nargs="+",
                         help="DefMod files to read")
+    parser.add_argument('--oslib-dir', action='store', default=None,
+                        help="Directory holding OSLib files")
     parser.add_argument('--swi-conditions', action='store',
                         help="File to write the SWI conditions into")
     parser.add_argument('--create-pymodule-template', action='store',
@@ -1033,27 +1138,34 @@ def main():
     global debug
     debug = options.debug
 
-    all_defmods = []
+    defmods = DefMods(basedir=options.oslib_dir)
 
     for defmodfile in options.files:
+        if not os.path.isfile(defmodfile):
+            filename = defmods.resolve(defmodfile.lower())
+            if filename:
+                defmodfile = filename
         print("Reading %s" % (defmodfile,))
-        try:
-            defmod = parse_file(defmodfile)
-            all_defmods.append(defmod)
-        except Exception as exc:
-            print("  Failed %s: %s: %s" % (defmodfile, exc.__class__.__name__, exc))
+        defmods.add(defmodfile)
+
+        #try:
+        #    defmods.add(defmodfile)
+        #except ParseError as exc:
+        #    raise
+        #except Exception as exc:
+        #    print("  Failed %s: %s: %s" % (defmodfile, exc.__class__.__name__, exc))
 
     if options.swi_conditions:
-        write_all_swi_conditions(all_defmods, options.swi_conditions)
+        write_all_swi_conditions(defmods, options.swi_conditions)
 
     if options.create_pymodule_template:
-        create_pymodule_template(all_defmods, options.create_pymodule_template)
+        create_pymodule_template(defmods, options.create_pymodule_template)
 
     if options.create_pymodule_constants:
-        create_pymodule_constants(all_defmods, options.create_pymodule_constants)
+        create_pymodule_constants(defmods, options.create_pymodule_constants)
 
     if options.create_api_template:
-        create_api_template(all_defmods, options.create_api_template)
+        create_api_template(defmods, options.create_api_template)
 
 
 if __name__ == '__main__':
