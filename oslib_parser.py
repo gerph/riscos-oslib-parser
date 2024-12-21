@@ -25,8 +25,8 @@ class ParseError(Exception):
 
     def __str__(self):
         if self.lineno:
-            return "{} whilst processing line number {}".format(self.message, self.lineno)
-        return self.message
+            return "{} whilst processing line number {}".format(self.args[0], self.lineno)
+        return self.args
 
 
 class Union(object):
@@ -38,6 +38,11 @@ class Union(object):
     def add_member(self, dtype):
         self.members.append(dtype)
 
+    def __repr__(self):
+        return "<{}({}, members: {})>".format(self.__class__.__name__,
+                                              self.name,
+                                              ', '.join(str(x) for x in self.members))
+
 
 class Array(object):
 
@@ -45,12 +50,22 @@ class Array(object):
         self.dtype = dtype
         self.nelements = elements
 
+    def __repr__(self):
+        return "<{}({} x {})>".format(self.__class__.__name__,
+                                      self.nelements,
+                                      self.dtype)
+
 
 class Struct(object):
 
     def __init__(self, name=None):
         self.name = name
         self.members = []
+
+    def __repr__(self):
+        return "<{}({}, members: {})>".format(self.__class__.__name__,
+                                              self.name,
+                                              ', '.join(str(x) for x in self.members))
 
     def add_member(self, dtype):
         self.members.append(dtype)
@@ -62,6 +77,12 @@ class Member(object):
         self.dtype = dtype
         self.name = name
         self.array = array
+
+    def __repr__(self):
+        return "<{}({} {}, array: {})>".format(self.__class__.__name__,
+                                               self.dtype,
+                                               self.name,
+                                               self.array)
 
 
 @functools.total_ordering
