@@ -525,7 +525,7 @@ class Statement(object):
                 elif tok == 'ENTRY':
                     self.expect('(')
                     while True:
-                        reg = self.token()
+                        reg = self.token().upper()
                         if reg[0] != 'R' and reg != 'FLAGS':
                             raise ParseError("Entry register name not understood: %s" % (reg,))
                         if reg == 'FLAGS':
@@ -577,7 +577,8 @@ class Statement(object):
                         else:
                             self.push_token(tok)
 
-                        swi.add_entry(Register(reg, assign, dtype, name))
+                        addreg = Register(reg, assign, dtype, name)
+                        swi.add_entry(addreg)
 
                         tok = self.expect((',', ')'))
                         if tok == ')':
@@ -586,7 +587,7 @@ class Statement(object):
                 elif tok == 'EXIT':
                     self.expect('(')
                     while True:
-                        reg = self.token()
+                        reg = self.token().upper()
                         if reg[0] != 'R' and reg != 'FLAGS':
                             raise ParseError("Exit register name not understood: %s" % (reg,))
                         updated = False
@@ -619,7 +620,8 @@ class Statement(object):
                         else:
                             self.push_token(tok)
 
-                        swi.add_exit(Register(reg, assign, dtype, name, updated, corrupted))
+                        addreg = Register(reg, assign, dtype, name, updated, corrupted)
+                        swi.add_exit(addreg)
 
                         tok = self.expect((',', ')'))
                         if tok == ')':
