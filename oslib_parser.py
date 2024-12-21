@@ -170,6 +170,42 @@ class SWI(object):
         self.exit.append(reg)
         # Create a dictionary of the registers as well?
 
+    def inregs(self):
+        inregs = {}
+        nreg = 0
+        lastreg = None
+        for reg in self.entry:
+            if reg.reg[0] == 'R':
+                if reg.assign == '#':
+                    # This is a constant, which we can do last
+                    if -1 not in inregs:
+                        inregs[-1] = []
+                    inregs[-1].append(reg)
+                else:
+                    if reg.assign == '|':
+                        if lastreg and lastreg.assign == '#' and lastreg.reg == reg.reg:
+                            reg = reg.copy()
+                            reg.assign = '='
+                            lastreg = lastreg.copy()
+                            lastreg.assign = '|'
+                            inregs[-1][-1] = lastreg
+                    if nreg not in inregs:
+                        inregs[nreg] = []
+                    inregs[nreg].append(reg)
+                    nreg += 1
+                lastreg = reg
+
+        return inregs
+
+    def outregs(self):
+        outregs = {}
+        nreg = len([reg for reg in self.inregs() if reg != -1])
+        for reg in self.exit:
+            if reg.reg[0] == 'R' and reg.assign != '?':
+                outregs[nreg] = reg
+                nreg += 1
+        return outregs
+
 
 class DefMod(object):
 
@@ -1053,6 +1089,60 @@ def create_python_api_template(defmods, filename):
                             })
 
 
+# Replacements for the function name expansion
+oslib_swifunc1_re = re.compile("([A-Z])([A-Z][a-z])")
+oslib_swifunc2_re = re.compile("([a-z])([A-Z])")
+
+
+def oslib_swifunc(name):
+    """
+    Convert a SWI name to a function name.
+
+    The name is given in the form OS_MyOperationHere and should
+    be converted to os_my_operation_here.
+    Multiple capitalised letters should become a single string,
+    eg Portable_ReadBMUVariable should become xportable_read_bmu_variable
+    """
+    if '_' not in name:
+        print("Warning: SWI '{}' does not have any underscore".format(name))
+        return name.lower()
+    (module, name) = name.split('_', 1)
+    name = oslib_swifunc1_re.sub(r"\1_\2", name)
+    name = oslib_swifunc2_re.sub(r"\1_\2", name)
+    return ("%s_%s" % (module, name)).lower()
+
+
+def create_aarch64_api(defmods, filename):
+    def simple_orr_constant(defmod, value):
+        if value in defmod.constants:
+            value = defmod.constants[value].value
+        if isinstance(value, list):
+            value = value[0]
+        if not isinstance(value, int):
+            print("WARNING: Value %r (%s) is not a number" % (value, value.__class__.__name__))
+            return True
+        #print("Simple ORR: %i (&%x)" % (value, value))
+        lowest_bit = value & ~(value-1)
+        while value and value & lowest_bit:
+            # Clear lowest bit
+            value = value &~lowest_bit
+            lowest_bit = lowest_bit << 1
+        #print("  Simple = %r" % (not bool(value),))
+        if value:
+            # There is a discontinuous run of 1 bits, so not simple
+            return False
+        return True
+
+    template = LocalTemplates('templates')
+    template.render_to_file('aarch64-api.s.j2', filename,
+                            {
+                                'defmods': defmods,
+                                'types': defmods.types,
+                                'simple_orr_constant': simple_orr_constant,
+                                'oslib_swifunc': oslib_swifunc,
+                            })
+
+
 def create_pymodule_constants(defmods, filename):
     template = LocalTemplates('templates')
     template.render_to_file('pymodule_constants.py.j2', filename,
@@ -1238,6 +1328,8 @@ def setup_argparse():
                         help="File to write a template for an API of the module")
     parser.add_argument('--create-python-api-template', action='store',
                         help="File to write a template for an Python API of the module")
+    parser.add_argument('--create-aarch64-api', action='store',
+                        help="File to write an AArch64 assembler file for an API of the module")
     parser.add_argument('--create-nvram-constants', action='store',
                         help="File to write a constants file for NVRAM (pass OSByte definition)")
 
@@ -1286,6 +1378,9 @@ def main():
 
     if options.create_python_api_template:
         create_python_api_template(defmods, options.create_python_api_template)
+
+    if options.create_aarch64_api:
+        create_aarch64_api(defmods, options.create_aarch64_api)
 
     if options.create_nvram_constants:
         create_nvram_constants(defmods, options.create_nvram_constants)

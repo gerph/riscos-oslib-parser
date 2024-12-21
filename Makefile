@@ -22,6 +22,7 @@ all: \
 	pymodules-constants \
 	pyromaniac-apis \
 	python-apis \
+	aarch64
 
 oslib: ${OSLIB_SOURCES}/Core/oslib/OS.swi
 
@@ -55,3 +56,7 @@ pyromaniac-apis:
 python-apis:
 	mkdir -p ${OUTPUT}/python-apis
 	./make-python-apis.sh ${OUTPUT}/python-apis ${SWI_FILES}
+
+aarch64:
+	mkdir -p ${OUTPUT}/aarch64
+	./make-aarch64.sh ${OUTPUT}/aarch64 ${SWI_FILES}
