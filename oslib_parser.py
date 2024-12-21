@@ -1017,12 +1017,36 @@ def create_api_template(defmods, filename):
                             })
 
 
+def create_python_api_template(defmods, filename):
+    template = LocalTemplates('templates')
+    template.render_to_file('python-api.py.j2', filename,
+                            {
+                                'defmods': defmods,
+                                'types': defmods.types,
+                            })
+
+
 def create_pymodule_constants(defmods, filename):
     template = LocalTemplates('templates')
     template.render_to_file('pymodule_constants.py.j2', filename,
                             {
                                 'defmods': defmods
                             })
+
+
+class TypeRef(object):
+    """
+    A reference to a type, used when constructing the DefMods types list.
+    """
+
+    def __init__(self, name, dtype, defmod):
+        self.name = name
+        self.dtype = dtype
+        self.defmod = defmod
+
+    def __repr__(self):
+        return "<{}({!r} in {}, type={})>".format(self.__class__.__name__,
+                                                  self.name, self.defmod, self.dtype)
 
 
 class DefMods(object):
@@ -1126,6 +1150,8 @@ def setup_argparse():
                         help="File to write a constants for pyromaniac")
     parser.add_argument('--create-api-template', action='store',
                         help="File to write a template for an API of the module")
+    parser.add_argument('--create-python-api-template', action='store',
+                        help="File to write a template for an Python API of the module")
 
     return parser
 
@@ -1167,6 +1193,8 @@ def main():
     if options.create_api_template:
         create_api_template(defmods, options.create_api_template)
 
+    if options.create_python_api_template:
+        create_python_api_template(defmods, options.create_python_api_template)
 
 if __name__ == '__main__':
     sys.exit(main())

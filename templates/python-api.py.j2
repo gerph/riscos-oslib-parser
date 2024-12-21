@@ -1,0 +1,329 @@
+"""
+RISC OS Python OSLib API template - probably needs modification before use.
+"""
+
+import ctypes
+from swi import swi
+
+{%- set package_name = 'oslib' -%}
+
+{%- set ns=namespace(seen_needs=set()) -%}
+{%- for defmod in defmods -%}
+ {%- if defmod.inctype != 'required' -%}
+  {%- continue -%}
+ {%- endif %}
+
+
+{%- from "lib_constants_py.j2" import defmod_constants with context -%}
+
+{%- for defmod in defmods -%}
+ {%- if defmod.inctype != 'required' -%}
+  {%- continue -%}
+ {%- endif %}
+
+
+################# {{ defmod.name }} constants ##################################
+{{- defmod_constants(defmod, '') }}
+{% endfor %}
+
+################# {{ defmod.name }} includes ###################################
+{% for need in defmod.needs -%}
+    {%- if package_name not in ns.seen_needs %}
+import {{ package_name }}.{{ need|lower }}
+{{- ns.seen_needs.add(package_name) or '' -}}
+    {%- endif -%}
+{%- endfor -%}
+{%- endfor -%}
+
+
+{%- macro ctypes_name(dtype) -%}
+ {%- if dtype in ('.Any', '.Asm', '&.Asm', '&Void', '&.Data') -%}
+  ctypes.c_void_p
+ {%- elif dtype == '.Bool' -%}
+  ctypes.c_int
+ {%- elif dtype == '.Int' -%}
+  ctypes.c_int
+ {%- elif dtype == '.Short' -%}
+  ctypes.c_int16
+ {%- elif dtype == '.Bits' -%}
+  ctypes.c_uint
+ {%- elif dtype == '.Char' -%}
+  ctypes.c_char
+ {%- elif dtype == '.Byte' -%}
+  ctypes.c_byte
+ {%- elif dtype == '&.String' -%}
+  ctypes.c_char_p
+ {%- elif dtype.__class__.__name__ in ('Array') -%}
+  {{ ctypes_name(dtype.dtype) }} * {{ dtype.nelements }}
+ {%- elif dtype.__class__.__name__ in ('Union', 'Struct') -%}
+  {{ dtype.name or "<unknown name of a " + dtype.__class__.__name__ + ">" }}
+ {%- else -%}
+  {# It might be a type we can immediately dereference #}
+  {%- if dtype in types -%}
+   {%- if types[dtype].defmod.inctype == 'required' -%}
+    {{ dtype }}
+   {%- else -%}
+    {{ package_name }}.{{ types[dtype].defmod.modname }}.{{ dtype }}
+   {%- endif -%}
+  {%- else -%}
+   "unknown type {{ dtype }}"
+  {%- endif -%}
+ {%- endif -%}
+{%- endmacro -%}
+
+
+{%- for defmod in defmods -%}
+ {%- if defmod.inctype != 'required' -%}
+  {%- continue -%}
+ {%- endif %}
+
+
+################# {{ defmod.name }} types ######################################
+{% for typename, type in defmod.types.items() -%}
+{# Type: {{ typename }}  {{ type }} #}
+{%- if type.__class__.__name__ in ('Struct', 'Union') %}
+
+
+class {{ typename }}({{ "ctypes.Structure" if type.__class__.__name__ == 'Struct' else "ctypes.Union" }}):
+    _fields_ = [
+{%- for member in type.members %}
+            ("{{ member.name }}", {{ ctypes_name(member.dtype) }}), {#- {{ member.dtype }} #}
+{%- endfor %}
+        ]
+{%- elif type.__class__.__name__ == 'str' and type[0] == '.' %}
+{{ typename }} = {{ ctypes_name(type) }}
+{%- endif -%}
+{%- endfor -%}
+{%- endfor -%}
+
+
+
+{%- macro extract_swi_name(swi) -%}
+{%- if swi.name.split('_')|length > 1 -%}
+{%- set parts = swi.name.split('_') -%}
+{{ parts[0] }}_{{ parts[1] }}
+{%- else -%}
+{{ swi.name }}
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro register_definition(reg) -%}
+{%- if reg.assign == '?' -%}
+  {{ reg.reg }} corrupted
+{%- elif reg.assign == '#' -%}
+  {%- if reg.name[0] == "'" -%}
+    {{ reg.reg }} = {{ reg.name }} (constant word)
+  {%- elif reg.name|string|length > 2 and (reg.name[0] != 'R' or reg.name[1] not in '0123456789') -%}
+    {{ reg.reg }} = {{ reg.name }} (constant)
+  {%- else -%}
+    {{ reg.reg }} = {{ '&%x'|format(reg.name) }} (constant)
+  {%- endif -%}
+{%- else -%}
+  {{ reg.reg }} {{ reg.assign }} {{ reg.name }} ({{reg.dtype}})
+{%- endif -%}
+{%- endmacro %}
+
+{%- macro register_description(reg) -%}
+{%- if reg.assign == '?' -%}
+{%- elif reg.assign == '#' -%}
+ corrupted
+{%- elif reg.assign == '#' -%}
+  {%- if reg.name[0] == "'" -%}
+    {{ reg.name }} (constant word)
+  {%- else -%}
+    {{ reg.name }} (constant word)
+  {%- endif -%}
+{%- else -%}
+  {{ reg.name }} ({{reg.dtype}})
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro register_return(reg, index) -%}
+{%- set regref = "rout[" + index|string +"]" if index != -1 else "rout" -%}
+{%- if reg.assign == '->' -%}
+ {%- if reg.dtype|lower == '.string' -%}
+  ctypes.string_at({{ regref }})  # {{ reg.dtype }}
+ {%- else -%}
+  {{reg.dtype}}.from_address({{ regref }})
+ {%- endif -%}
+{%- else -%}
+ {{ regref }}  # {{ reg.dtype }}
+{%- endif -%}
+{%- endmacro %}
+
+{%- macro regstring_for_reg(reg) -%}
+  {%- if reg.dtype in ('.String', '&.Char') or (reg.dtype == '.Char' and reg.assign == '->') -%}
+   s
+  {%- elif reg.dtype in ('.Int', '.Short', '.Bool', '.Char', '.Byte') -%}
+   i
+  {%- else -%}
+   I
+  {%- endif -%}
+{%- endmacro -%}
+
+{%- macro regvalue_for_reg(reg) -%}
+  {%- if (   (reg.dtype[0] == '&' and reg.dtype[1] != '.')
+          or (reg.dtype[0] != '.' and reg.assign == '->'))
+         and (reg.dtype in types and types[reg.dtype].dtype[0] in ('.Int', '.Short', '.Bool', '.Char', '.Byte')) -%}
+   {{ reg.name }} if isinstance({{ reg.name }}, int) else ctypes.addressof({{ reg.name }})
+  {%- elif reg.dtype == '.Bool' -%}
+   1 if {{ reg.name }} else 0
+  {%- else -%}
+   {{ reg.name }}
+  {%- endif -%}
+{%- endmacro -%}
+
+
+{% for defmod in defmods %}
+ {%- if defmod.inctype != 'required' -%}
+  {%- continue -%}
+ {%- endif %}
+
+
+################# {{ defmod.name }} interfaces #################################
+{%- for name, swi in defmod.interfaces.items()|sort %}
+
+def {{ swi.name|lower }}(
+{%- if swi.entry -%}
+ {%- set ns = namespace(first=True) -%}
+ {%- for reg in swi.entry -%}
+  {%- if reg.assign != '#' -%}
+   {%- if not ns.first -%},
+     {{ ' ' * swi.name|length }}
+   {%- else -%}
+    {%- set ns.first = False -%}
+   {%- endif -%}
+   {{reg.name}}
+  {%- endif -%}
+ {%- endfor %}
+{%- else -%}
+{%- endif %}):
+
+{#- Prepare the output registers, stripping invisible elements -#}
+{%- set ns = namespace(exitregs=[]) -%}
+{%- for reg in swi.exit -%}
+ {%- if reg.name and reg.reg.startswith('R') -%}
+  {{ ns.exitregs.append(reg) or '' }}
+ {%- endif -%}
+{%- endfor -%}
+{%- set exitregs = ns.exitregs -%}
+
+
+{#- Function prologue comment #}
+    """
+{%- if swi.description %}
+    {{ swi.description }}
+
+{%- endif -%}
+{%- if swi.entry -%}
+ {% for reg in swi.entry %}
+  {%- if reg.assign != '#' %}
+    @param {{ '{:<12s}'.format(reg.name + ': ') }}{{ register_description(reg) }}
+  {%- endif %}
+ {%- endfor %}
+{%- endif %}
+{%- if exitregs -%}
+ {%- if exitregs|length == 1 %}
+
+    @return: {% else %}
+
+    @return: Tuple of (
+ {%- endif -%}
+ {%- for reg in exitregs -%}
+  {{ '' if loop.first else ', ' }}{{ reg.name }}
+ {%- endfor -%}
+ {%- if exitregs|length != 1 -%}
+ )
+ {%- endif -%}
+{%- endif %}
+    """
+
+
+{#- Register definition #}
+{%- if swi.entry %}
+ {%- for reg in swi.entry %}
+    # {{ '=>' if loop.first else '  ' }}  {{ register_definition(reg) }}
+ {%- endfor -%}
+{%- endif %}
+{% if swi.exit -%}
+ {%- for reg in swi.exit %}
+    # {{ '<=' if loop.first else '  ' }}  {{ register_definition(reg) }}
+ {%- endfor %}
+{%- endif %}
+
+{#- SWI call #}
+    rout = swi({{ swi.number }},  # {{ extract_swi_name(swi) }}
+               "
+{#- Register string -#}
+{%- if swi.entry -%}
+ {%- set ns = namespace(regnext=0) -%}
+ {%- for reg in swi.entry -%}
+  {%- if reg.assign != '|' -%}
+   {%- for _ in range(reg.reg[1:]|int - ns.regnext)  -%}
+    .
+    {%- set ns.regnext = ns.regnext + 1 -%}
+   {%- endfor -%}
+   {{ regstring_for_reg(reg) }}
+   {%- set ns.regnext = ns.regnext + 1 -%}
+  {%- endif -%}
+ {%- endfor -%}
+{%- endif -%}
+
+{%- if exitregs -%}
+ ;
+ {%- set ns = namespace(regnext=0) -%}
+ {%- for reg in exitregs -%}
+  {%- for _ in range(reg.reg[1:]|int - ns.regnext)  -%}
+   .
+   {%- set ns.regnext = ns.regnext + 1 -%}
+  {%- endfor -%}
+  {{ regstring_for_reg(reg) }}
+  {%- set ns.regnext = ns.regnext + 1 -%}
+ {%- endfor -%}
+{%- endif -%}
+"
+
+{#- SWI input registers -#}
+{%- if swi.entry -%}
+ {%- for reg in swi.entry -%}
+  {%- if reg.assign == '|' -%}
+   {{ ' | '  + regvalue_for_reg(reg) }}
+  {%- else -%}
+   ,
+               {{ regvalue_for_reg(reg) }}
+  {%- endif -%}
+ {%- endfor -%}
+ )
+{%- else -%}
+ )
+{%- endif %}
+
+
+{#- SWI output registers -#}
+{%- if exitregs %}
+ {%- for reg in exitregs -%}
+  {%- if reg.name and reg.reg.startswith('R') %}
+    {{ reg.name }} = {{ register_return(reg, loop.index0 if exitregs|length != 1 else -1 ) }}
+{%- endif -%}
+ {%- endfor %}
+{%- endif %}
+
+
+{#- Return values -#}
+{%- if exitregs %}
+ {%- if exitregs|length == 1 %}
+
+    return {{ exitregs[0].name }}
+ {%- else %}
+
+    return (
+  {%- for reg in exitregs -%}
+   {%- if reg.name and reg.reg.startswith('R') -%}
+    {{ '' if loop.first else ', ' }}{{ reg.name }}
+   {%- endif -%}
+  {%- endfor -%}
+  )
+ {%- endif -%}
+{%- endif %}
+{% endfor %}
+{% endfor %}

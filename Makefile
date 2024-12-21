@@ -18,7 +18,8 @@ all: \
 	${OUTPUT}/swi_conditions.py \
 	pymodules-templates \
 	pymodules-constants \
-	pyromaniac-apis
+	pyromaniac-apis \
+	python-apis
 
 oslib: ${OSLIB_SOURCES}/Core/oslib/OS.swi
 
@@ -42,3 +43,7 @@ pymodules-constants:
 pyromaniac-apis:
 	mkdir -p ${OUTPUT}/pyromaniac-apis
 	./make-pyromaniac-apis.sh ${OUTPUT}/pyromaniac-apis ${SWI_FILES}
+
+python-apis:
+	mkdir -p ${OUTPUT}/python-apis
+	./make-python-apis.sh ${OUTPUT}/python-apis ${SWI_FILES}
