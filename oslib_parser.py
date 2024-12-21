@@ -900,12 +900,45 @@ def write_swi_conditions(swis, fh):
             fh.write("%s 'exit': {%s}}],\n" % (indent, ", ".join(exit_reglist)))
 
 
-class Template(object):
+def now():
+    return time.time()
+
+
+def timestamp(epochtime, time_format="%Y-%m-%d %H:%M:%S"):
+    return datetime.datetime.fromtimestamp(epochtime).strftime(time_format)
+
+
+def value_repr(value, name):
+    if isinstance(value, (tuple, list)):
+        value = value[0]
+    if name.startswith(('Error_', 'Message_')) or name.endswith(('_FileType',)):
+        # These two are always formatted as Hex
+        return '0x%x' % (value,)
+    if value & (value - 1) == 0:
+        if value == 0:
+            return '0'
+        else:
+            bit = int(math.log(value & ~(value - 1)) / math.log(2))
+        return '(1<<%i)' % (bit,)
+    else:
+        return value
+
+
+jinja2_functions = {
+        'now': now,
+        'timestamp': timestamp,
+        'value_repr': value_repr,
+        'set': set,
+    }
+
+
+class Templates(object):
 
     def __init__(self, path):
         import jinja2
         template_loader = jinja2.FileSystemLoader(searchpath=path)
-        self.environment = jinja2.Environment(loader=template_loader)
+        self.environment = jinja2.Environment(loader=template_loader,
+                                              extensions=['jinja2.ext.loopcontrols'])
 
     def render(self, template_name, template_vars=None):
         """
@@ -929,62 +962,44 @@ class Template(object):
         @param output:        The output filename
         @param template_vars: A dictionary of variables to process
         """
-        content = self.render(template_name, template_vars)
-        with open(output, 'w') as f:
+        jinja2_vars = dict(template_vars)
+        jinja2_vars.update(jinja2_functions)
+        content = self.render(template_name, jinja2_vars)
+        with open(output, 'wb') as f:
             print("Create %s" % (output,))
             f.write(content.encode("utf-8"))
 
 
-def now():
-    return time.time()
+class LocalTemplates(Templates):
 
+    def __init__(self, path=None):
+        here = os.path.dirname(__file__)
+        if path:
+            here = os.path.join(here, path)
+        super(LocalTemplates, self).__init__(here)
 
-def timestamp(epochtime, time_format="%Y-%m-%d %H:%M:%S"):
-    return datetime.datetime.fromtimestamp(epochtime).strftime(time_format)
 
 
 def create_pymodule_template(defmods, filename):
-    template = Template(os.path.dirname(__file__))
+    template = LocalTemplates('templates')
     template.render_to_file('pymodule.py.j2', filename,
                             {
-                                'now': now,
-                                'timestamp': timestamp,
-                                'defmods': defmods
+                                'defmods': defmods,
                             })
 
 
 def create_api_template(defmods, filename):
-    template = Template(os.path.dirname(__file__))
+    template = LocalTemplates('templates')
     template.render_to_file('pyro-api.py.j2', filename,
                             {
-                                'now': now,
-                                'timestamp': timestamp,
                                 'defmods': defmods
                             })
 
 
 def create_pymodule_constants(defmods, filename):
-    template = Template(os.path.dirname(__file__))
-    def value_repr(value, name):
-        if isinstance(value, (tuple, list)):
-            value = value[0]
-        if name.startswith(('Error_', 'Message_')) or name.endswith(('_FileType',)):
-            # These two are always formatted as Hex
-            return '0x%x' % (value,)
-        if value & (value - 1) == 0:
-            if value == 0:
-                return '0'
-            else:
-                bit = int(math.log(value & ~(value - 1)) / math.log(2))
-            return '(1<<%i)' % (bit,)
-        else:
-            return value
-
+    template = LocalTemplates('templates')
     template.render_to_file('pymodule_constants.py.j2', filename,
                             {
-                                'now': now,
-                                'value_repr': value_repr,
-                                'timestamp': timestamp,
                                 'defmods': defmods
                             })
 
