@@ -16,10 +16,11 @@ SWI_FILES = ${OSLIB_SOURCES}/Core/oslib/*.swi \
 
 all: \
 	${OUTPUT}/swi_conditions.py \
+	${OUTPUT}/nvram_constants.py \
 	pymodules-templates \
 	pymodules-constants \
 	pyromaniac-apis \
-	python-apis
+	python-apis \
 
 oslib: ${OSLIB_SOURCES}/Core/oslib/OS.swi
 
@@ -31,6 +32,9 @@ ${OSLIB_SOURCES}/Core/oslib/OS.swi:
 
 ${OUTPUT}/swi_conditions.py: oslib dirs
 	python oslib_parser.py --swi-conditions $@ ${SWI_FILES}
+
+${OUTPUT}/nvram_constants.py: oslib dirs
+	python oslib_parser.py --create-nvram-constants $@ ${SWI_FILES}
 
 pymodules-templates:
 	mkdir -p ${OUTPUT}/pymodule-templates

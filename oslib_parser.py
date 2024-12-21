@@ -1034,6 +1034,63 @@ def create_pymodule_constants(defmods, filename):
                             })
 
 
+def create_nvram_constants(defmods, filename):
+    # Variable names that aren't useful to us
+    ignorable = {
+            'RISCIX',
+            'RISCIX32',
+        }
+    template = LocalTemplates('templates')
+    # Rather than making the template do all the work, we'll filter the values down to
+    # just the constants, so that they can go into the file more easily.
+    values = {}
+    names = {}
+    for defmod in defmods:
+        for name, constant in defmod.constants.items():
+            if not name.startswith('OSByte_Configure'):
+                # Skip non-NVRAM constants
+                continue
+            if constant.dtype.lower() != '.int':
+                # Skip anything that's not a value
+                continue
+            if name.endswith('Shift'):
+                # Skip bitfield shifts
+                continue
+            if name.endswith('Limit'):
+                # Skip field widths
+                continue
+
+
+            # Trim off the leader
+            name = name[16:]
+
+            if name in ignorable:
+                # Skip the names that we don't care about.
+                continue
+
+            value = constant.value
+            if isinstance(value, (list, tuple)):
+                # Annotated value
+                value = value[0]
+
+            if name in names:
+                print("Warning: Name {} is defined multiple times".format(name))
+            else:
+                names[name] = value
+
+            if value in values:
+                values[value] = '{} / {}'.format(values[value], name)
+            else:
+                values[value] = name
+            #print("%s => %s" % (name, value))
+    template.render_to_file('nvram_constants.py.j2', filename,
+                            {
+                                'defmods': defmods,
+                                'names': names,
+                                'values': values,
+                            })
+
+
 class TypeRef(object):
     """
     A reference to a type, used when constructing the DefMods types list.
@@ -1152,6 +1209,8 @@ def setup_argparse():
                         help="File to write a template for an API of the module")
     parser.add_argument('--create-python-api-template', action='store',
                         help="File to write a template for an Python API of the module")
+    parser.add_argument('--create-nvram-constants', action='store',
+                        help="File to write a constants file for NVRAM (pass OSByte definition)")
 
     return parser
 
@@ -1195,6 +1254,10 @@ def main():
 
     if options.create_python_api_template:
         create_python_api_template(defmods, options.create_python_api_template)
+
+    if options.create_nvram_constants:
+        create_nvram_constants(defmods, options.create_nvram_constants)
+
 
 if __name__ == '__main__':
     sys.exit(main())

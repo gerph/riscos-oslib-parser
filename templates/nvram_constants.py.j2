@@ -1,0 +1,15 @@
+"""
+NVRAM addresses as Python constants for looking up location and names.
+"""
+
+names = {
+{%- for name, value in names.items()|sort(attribute=1) %}
+        "{{ name }}": {{ value }},
+{%- endfor %}
+    }
+
+values = {
+{%- for value, names in values.items()|sort() %}
+        {{ value }}: "{{ names }}",
+{%- endfor %}
+    }
