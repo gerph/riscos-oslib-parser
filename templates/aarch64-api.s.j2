@@ -89,6 +89,18 @@
 {%- endmacro -%}
 
 
+// General macros
+
+.altmacro
+.macro signature name
+0:
+.asciz "\name"
+.balign 4
+1:
+.long 0xFF000000 + ( .- 0b )
+.endm
+
+
 {% for defmod in defmods %}
  {%- if defmod.inctype != 'required' -%}
   {%- continue -%}
@@ -99,11 +111,12 @@
 // ############## {{ defmod.name }} interfaces #################################
 {%- for name, swi in defmod.interfaces.items()|sort %}
 
-.section .text.{{swi.name|lower}}
+.section .text.x{{ oslib_swifunc(swi.name) }}
 
-.global {{swi.name|lower}}
+.global x{{ oslib_swifunc(swi.name) }}
 
-{{swi.name|lower}}:
+    signature x{{ oslib_swifunc(swi.name) }}
+x{{ oslib_swifunc(swi.name) }}:
 
 {#- Prepare the output registers, stripping invisible elements -#}
 {%- set ns = namespace(exitregs=[]) -%}
@@ -129,8 +142,10 @@
 
 {#- Entry sequence #}
     STP     x29, x30, [sp, #-16]!
+    MOV     x29, sp
 
-{%- if exitregs %}
+{%- if swi.outregs() %}
+
 // Prepare output registers
 {#- Prepare output registers #}
     SUB     sp, sp, #{{ (((exitregs|length) + 1) // 2) * 16 }}
@@ -140,8 +155,9 @@
 {%- endif %}
 
 {%- if swi.entry %}
+
 // Prepare input registers
-{# SWI input registers -#}
+{#- SWI input registers -#}
  {%- for inreg, regset in swi.inregs().items()|sort|reverse -%}
   {%- for reg in regset -%}
    {{ asm_regvalue_for_reg(defmod, reg, inreg) }}
@@ -160,9 +176,10 @@
     CSEL    x0, xzr, x0, VC
 {%- endif %}
 
-// Store output registers
 {#- SWI output registers -#}
-{%- if exitregs %}
+{%- if swi.outregs() %}
+
+// Store output registers
  {%- for outreg, reg in swi.outregs().items()|sort %}
     LDR     x10, [sp, #{{ 8 * loop.index0}}]
     STR     x{{reg.reg[1:]}}, [x10]                           // {{reg.name}}
@@ -178,6 +195,7 @@
 {%- if exitregs %}
     MOV     x0, x12
 {%- endif %}
+
     LDP     x29, x30, [sp], #16
     RET
 
