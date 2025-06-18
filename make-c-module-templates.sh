@@ -19,5 +19,5 @@ for file in "$@" ; do
     mkdir -p "$dest/$name/cmhg"
     mkdir -p "$dest/$name/c"
     python oslib_parser.py --create-module-cmhg-template "$dest/$name/cmhg/modhead" "$file" --oslib-dir "$OSLIB_DIR"
-    python oslib_parser.py --create-module-c-template "$dest/$name/c/modhead" "$file" --oslib-dir "$OSLIB_DIR"
+    python oslib_parser.py --create-module-c-template "$dest/$name/c/module" "$file" --oslib-dir "$OSLIB_DIR"
 done
