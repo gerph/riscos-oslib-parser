@@ -102,6 +102,12 @@ class Constant(object):
         self.dtype = dtype
         self.value = value
 
+    def __repr__(self):
+        return "<{}({} {}, value: {})>".format(self.__class__.__name__,
+                                               self.dtype,
+                                               self.name,
+                                               self.value)
+
     def __eq__(self, other):
         if not isinstance(other, Constant):
             return NotImplemented
@@ -116,6 +122,8 @@ class Constant(object):
             a = a[0]
         if isinstance(b, list):
             b = b[0]
+        if a == b:
+            return self.name < other.name
         return a < b
 
 

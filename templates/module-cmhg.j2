@@ -105,12 +105,37 @@ swi-decoding-table: {{ first_swi[0].name.split('_')[0] }} \
 ; numbers is dangerous.
 ;error-base: &123400
 
+{% set errors = defmod.constants|dictsort(false, 'value')|list() %}
+{% for error in errors|list() -%}
+    {%- if error[1].dtype != '.Bits' or error[1].name[:6] != 'Error_' -%}
+    {{ errors.remove(error) or '' }}
+  {%- endif -%}
+{%- endfor -%}
+{%- if errors|length() -%}
+; Allocating error messages within the module is more efficient than
+; doing so manually in your C code, and is less likely to pollute error
+; number space. The number is optional, and if omitted will be
+; allocated from the error chunk.
+error-identifiers: \
+{%- for error in errors -%}
+    {%- set name = error[0][6:] -%}
+    {%- if error[1].value|int(-1) == -1: -%}
+        {%- set num = error[1].value[0] -%}
+        {%- set message = name + ":" + error[1].value[1] -%}
+    {%- else %}
+        {%- set num = error[1].value -%}
+        {%- set message = name -%}
+    {%- endif %}
+        err_{{ name }}( &{{ '%x'|format(num) }}, "{{message}}"){{ '' if loop.last else ',' }}
+{%- endfor %}
+{%- else %}
+
 ; Allocating error messages within the module is more efficient than
 ; doing so manually in your C code, and is less likely to pollute error
 ; number space. The number is optional, and if omitted will be
 ; allocated from the error chunk.
 ;error-identifiers: err_DummyError("Dummy")
-
+{%- endif %}
 
 ; When the module is initialised, this routine will be entered. You
 ; should be very careful to initialise your module safely. If anything
