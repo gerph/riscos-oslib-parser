@@ -1,5 +1,5 @@
 ---
-# RISC OS 64 CI build
+# RISC OS CI build
 #
 # The 'release' job is triggered when a tag starting with a 'v' is created,
 # which will create a GitHub release for the repository with the name of the
@@ -40,7 +40,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y subversion
 
-      - name: Build the library
+      - name: Build generated files
         run: |
           make
 
