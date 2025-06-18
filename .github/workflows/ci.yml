@@ -1,5 +1,5 @@
 ---
-# RISC OS 64 CI build
+# RISC OS CI build
 #
 # The 'release' job is triggered when a tag starting with a 'v' is created,
 # which will create a GitHub release for the repository with the name of the
@@ -14,11 +14,11 @@ name: Parser
 #   * tag creation for tags beginning with a 'v'
 on:
   push:
-    branches: ["master"]
+    branches: ["*"]
     tags: ["v*"]
   # Pull request events happen on pull request state transitions, so we probably don't want this here.
-  pull_request:
-    branches: ["*"]
+  #pull_request:
+  #  branches: ["*"]
 
 jobs:
   build:
@@ -36,9 +36,11 @@ jobs:
 
       - name: Install prerequisites
         run: |
+          # Subversion isn't present on ubuntu-latest since Jan 2025.
+          sudo apt-get update
           sudo apt-get install -y subversion
 
-      - name: Build the library
+      - name: Build generated files
         run: |
           make
 

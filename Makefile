@@ -22,6 +22,7 @@ all: \
 	pymodules-constants \
 	pyromaniac-apis \
 	python-apis \
+	module-templates \
 	aarch64
 
 oslib: ${OSLIB_SOURCES}/Core/oslib/OS.swi
@@ -60,3 +61,7 @@ python-apis:
 aarch64:
 	mkdir -p ${OUTPUT}/aarch64
 	./make-aarch64.sh ${OUTPUT}/aarch64 ${SWI_FILES}
+
+module-templates:
+	mkdir -p ${OUTPUT}/cmodule-templates
+	./make-c-module-templates.sh ${OUTPUT}/cmodule-templates ${SWI_FILES}
