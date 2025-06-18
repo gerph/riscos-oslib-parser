@@ -24,6 +24,7 @@ There are 4 different types of file that can be generated with the parser:
 * PyModule template (`--create-pymodule-template FILE`): Generates a Python PyModule for use with RISC OS Pyromaniac.
 * Python constants (`--create-pymodule-constants FILE`): Generate a Python file containing constants for the module.
 * Pyromaniac API template (`--create-api-template FILE`): Generate a Pyromaniac API method for the module.
+* C module templates (`--create-module-cmhg-template` and `--create-module-c-template`): Generate sources for a C module veneer template.
 
 ## Usage
 
