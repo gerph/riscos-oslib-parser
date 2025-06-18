@@ -1,0 +1,120 @@
+{#- We only really expect a single module, but if they really request multiple, we'll do it -#}
+
+{% for defmod in defmods -%}
+/*******************************************************************
+ * File:     veneer
+ * Purpose:  SWI veneers for the {{ defmod.name }} module
+ * Author:   XXX
+ * Date:     {{ timestamp(now(), "%d %b %Y") }}
+ ******************************************************************/
+
+#include <stdio.h>
+
+#include "kernel.h"
+#include "modhead.h"
+
+
+/* Define this to debug this file */
+//#define DEBUG
+
+
+#ifdef DEBUG
+#define dprintf if (1) printf
+#else
+#define dprintf if (0) printf
+#endif
+
+
+
+
+/***************************************************************************
+ * Function:     Mod_Init
+ * Description:  Initialise the module, setting up vectors, callbacks and
+ *               any other parts of the system necessary for the module to
+ *               function.
+ * Parameters:   tail        = pointer to command line (control terminated)
+ *               podule_base = address of podule module was started from, or
+ *                             NULL if none
+ *               pw          = private word for module
+ * On exit:      Return NULL for successful initialisation, or a pointer to
+ *               an error block if the module could not start properly.
+ **************************************************************************/
+_kernel_oserror *Mod_Init(const char *tail, int podule_base, void *pw)
+{
+    _kernel_oserror *err = NULL;
+    dprintf("{{ defmod.name }} initialised\n");
+    return err;
+}
+
+
+
+/***************************************************************************
+ * Function:     Mod_Final
+ * Description:  Finalise the module, shutting down any systems necessary,
+ *               freeing vectors and releasing workspace
+ * Parameters:   fatal       = fatality indicator; 1 if fatal, 0 if
+ *                             reinitialising
+ *               podule_base = address of podule module was started from, or
+ *                             NULL if none
+ *               pw          = private word for module
+ * On exit:      Return 0 for successful finalisation, or a pointer to an
+ *               error block if module was not shutdown properly.
+ **************************************************************************/
+_kernel_oserror *Mod_Final(int fatal, int podule_base, void *pw)
+{
+    dprintf("{{ defmod.name }} finalised\n");
+    return NULL;
+}
+
+
+{%- set swis = [] -%}
+{%- if defmod.swis %}
+{%- set swis = defmod.modswis|dictsort()|list() %}
+{%- for swi in swis -%}
+  {%- if (swi[0] < 512 and not defmod.name.lower().startswith('os')) or swi[1][0].hidden -%}
+    {{ swis.remove(swi) or '' }}
+  {%- endif -%}
+{%- endfor -%}
+{# Ensure that the SWIs that are listed have gaps #}
+{%- set gapped_swis = [] -%}
+{%- for swi in swis -%}
+  {%- set last_swinum = gapped_swis[-1][0] if (gapped_swis|length) else -1 -%}
+  {%- if last_swinum != -1 and swi[0] != last_swinum + 1 -%}
+    {# Need to insert a gap #}
+    {%- for n in range(swi[0] - (last_swinum + 1)) -%}
+      {{ gapped_swis.append((last_swinum + 1 + n, [])) or '' }}
+    {%- endfor -%}
+  {%- endif -%}
+  {{ gapped_swis.append(swi) or '' }}
+{%- endfor -%}
+{%- set swis = gapped_swis -%}
+{%- endif -%}
+{%- if swis %}
+{%- set first_swi = swis[0][1] %}
+{%- set swi_base = swis[0][0] %}
+{%- for swi, swilist in swis -%}
+    {%- if swilist|length %}
+
+
+
+/***************************************************************************
+ * Description:  SWI handler routine for {{ swilist[0].name }}
+ * Parameters:   number = SWI number within SWI chunk (i.e. 0 to 63)
+ *               r      = pointer to register block on entry
+ *               pw     = private word for module
+ * On exit:      Return NULL if SWI handled sucessfully, setting return
+ *               register values (r0-r9) in r.
+ *               Return error_BAD_SWI for out of range SWIs.
+ *               Return an error block for a custom error.
+ **************************************************************************/
+_kernel_oserror *SWI_{{ swilist[0].name.split('_', 1)[1] }}(int number, _kernel_swi_regs *r, void *pw)
+{
+    _kernel_oserror *err = NULL;
+    return err;
+}
+    {%- endif -%}
+{%- endfor %}
+{%- else %}
+{%- endif %}
+
+{% endfor %}

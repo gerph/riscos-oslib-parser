@@ -1064,6 +1064,22 @@ def create_message_details(defmods, filename):
                             })
 
 
+def create_module_cmhg_template(defmods, filename):
+    template = LocalTemplates('templates')
+    template.render_to_file('module-cmhg.j2', filename,
+                            {
+                                'defmods': defmods,
+                            })
+
+
+def create_module_c_template(defmods, filename):
+    template = LocalTemplates('templates')
+    template.render_to_file('module-c.j2', filename,
+                            {
+                                'defmods': defmods,
+                            })
+
+
 def create_pymodule_template(defmods, filename):
     template = LocalTemplates('templates')
     template.render_to_file('pymodule.py.j2', filename,
@@ -1320,6 +1336,10 @@ def setup_argparse():
                         help="File to write the SWI conditions into")
     parser.add_argument('--create-message-details', action='store',
                         help="File to write the Wimp message details into")
+    parser.add_argument('--create-module-cmhg-template', action='store',
+                        help="File to write a CMHG template for a C module into")
+    parser.add_argument('--create-module-c-template', action='store',
+                        help="File to write a C source template for a C module into")
     parser.add_argument('--create-pymodule-template', action='store',
                         help="File to write a template for a RISC OS Pyromaniac module")
     parser.add_argument('--create-pymodule-constants', action='store',
@@ -1366,6 +1386,12 @@ def main():
 
     if options.create_message_details:
         create_message_details(defmods, options.create_message_details)
+
+    if options.create_module_cmhg_template:
+        create_module_cmhg_template(defmods, options.create_module_cmhg_template)
+
+    if options.create_module_c_template:
+        create_module_c_template(defmods, options.create_module_c_template)
 
     if options.create_pymodule_template:
         create_pymodule_template(defmods, options.create_pymodule_template)
