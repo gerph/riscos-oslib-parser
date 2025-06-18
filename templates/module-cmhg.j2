@@ -1,6 +1,6 @@
 {#- We only really expect a single module, but if they really request multiple, we'll do it -#}
 
-{% for defmod in defmods -%}
+{% for defmod in defmods[0:1] -%}
 ; CMHG file for {{ defmod.name }}
 ; Created from OSLib definition, {{ timestamp(now(), "%d %b %Y") }}
 
@@ -32,7 +32,7 @@ help-string: {{ defmod.name }} Module_MajorVersion_CMHG Module_MinorVersion_CMHG
 {%- if defmod.swis %}
 {%- set swis = defmod.modswis|dictsort()|list() %}
 {%- for swi in swis -%}
-  {%- if (swi[0] < 512 and not defmod.name.lower().startswith('os')) or swi[1][0].hidden -%}
+  {%- if (swi[0] < 512 and not defmod.name.lower().startswith('os')) -%}
     {{ swis.remove(swi) or '' }}
   {%- endif -%}
 {%- endfor -%}

@@ -1,6 +1,64 @@
 {#- We only really expect a single module, but if they really request multiple, we'll do it -#}
 
-{% for defmod in defmods -%}
+{%- macro register_definition(reg) -%}
+{%- if reg.assign == '?' -%}
+  {{ reg.reg }} corrupted
+{%- elif reg.assign == '#' -%}
+  {%- if reg.name[0] == "'" -%}
+    {{ reg.reg }} = {{ reg.name }} (constant word)
+  {%- else -%}
+    {{ reg.reg }} = {{ '&%x'|format(reg.name) }} (constant)
+  {%- endif -%}
+{%- else -%}
+  {{ reg.reg }} {{ reg.assign }} {{ reg.name }}
+{%- endif -%}
+{%- endmacro %}
+
+
+
+{%- macro type_name(dtype) -%}
+ {%- if dtype in ('.Any', '.Asm', '&.Asm', '&Void', '&.Data', '.Data') -%}
+  void *
+ {%- elif dtype == '.Bool' -%}
+  bool
+ {%- elif dtype == '.Int' -%}
+  int32_t
+ {%- elif dtype == '.Short' -%}
+  int16_t
+ {%- elif dtype == '.Bits' -%}
+  uint32_t
+ {%- elif dtype == '.Char' -%}
+  uint8_t
+ {%- elif dtype == '.Byte' -%}
+  uint8_t
+ {%- elif dtype == '&.String' -%}
+  char *
+ {%- elif dtype == '.String' -%}
+  char *
+ {%- elif dtype.__class__.__name__ in ('Array') -%}
+  {{ ctypes_name(dtype.dtype) }}[{{ dtype.nelements }}]
+ {%- elif dtype.__class__.__name__ in ('Union', 'Struct') -%}
+  {{ dtype.name or "<unknown name of a " + dtype.__class__.__name__ + ">" }}
+ {%- else -%}
+  {%- if dtype[0] == '&' -%}
+   {{ type_name(dtype[1:]) }} *
+  {%- else -%}
+   {# It might be a type we can immediately dereference #}
+   {%- if dtype in types -%}
+    {%- if types[dtype].defmod.inctype == 'required' -%}
+     {{ dtype }}
+    {%- else -%}
+     {{ dtype }}
+    {%- endif -%}
+   {%- else -%}
+    "unknown type {{ dtype }}"
+   {%- endif -%}
+  {%- endif -%}
+ {%- endif -%}
+{%- endmacro -%}
+
+
+{% for defmod in defmods[0:1] -%}
 /*******************************************************************
  * File:     veneer
  * Purpose:  SWI veneers for the {{ defmod.name }} module
@@ -71,7 +129,7 @@ _kernel_oserror *Mod_Final(int fatal, int podule_base, void *pw)
 {%- if defmod.swis %}
 {%- set swis = defmod.modswis|dictsort()|list() %}
 {%- for swi in swis -%}
-  {%- if (swi[0] < 512 and not defmod.name.lower().startswith('os')) or swi[1][0].hidden -%}
+  {%- if (swi[0] < 512 and not defmod.name.lower().startswith('os')) -%}
     {{ swis.remove(swi) or '' }}
   {%- endif -%}
 {%- endfor -%}
@@ -98,6 +156,7 @@ _kernel_oserror *Mod_Final(int fatal, int podule_base, void *pw)
 {%- set swi_base = swis[0][0] %}
 {%- for swi, swilist in swis -%}
     {%- if swilist|length %}
+{% set baseswi = swilist[0] %}
 
 
 
@@ -114,6 +173,56 @@ _kernel_oserror *Mod_Final(int fatal, int podule_base, void *pw)
 _kernel_oserror *SWI_{{ swilist[0].name.split('_', 1)[1] }}(int number, _kernel_swi_regs *r, void *pw)
 {
     _kernel_oserror *err = NULL;
+    /*
+     * {{ baseswi.name }} - {{ baseswi.description }}
+     *
+{%- if baseswi.entry -%}
+{%- for reg in baseswi.entry %}
+     * {{ '=>' if loop.first else '  ' }}  {{ register_definition(reg) }}
+{%- endfor %}
+{%- endif -%}
+{%- if baseswi.exit -%}
+{% for reg in baseswi.exit %}
+     * {{ '<=' if loop.first else '  ' }}  {{ register_definition(reg) }}
+{%- endfor %}
+{%- endif %}
+     */
+{% if baseswi.entry|length %}
+    /* Input registers */
+{%- for reg in baseswi.entry %}
+{%- if reg.assign == '#' %}
+    /* {{ reg.reg }} is {{ reg.name }} */
+{%- elif reg.assign == '->' and reg.dtype not in ('.String', '&.String', '.Data') %}
+    {{ type_name(reg.dtype) }} *{{ reg.name }} = ({{ type_name(reg.dtype) }} *)r->r[{{reg.reg[1:]}}];
+{%- else %}
+    {{ type_name(reg.dtype) }} {{ reg.name }} = ({{ type_name(reg.dtype) }})r->r[{{reg.reg[1:]}}];
+{%- endif %}
+{%- endfor %}
+{%- endif %}
+{%- if baseswi.exit|length %}
+    /* Output registers */
+{%- for reg in baseswi.exit %}
+{%- if reg.reg == 'FLAGS' -%}
+{%- elif reg.assign == '?' %}
+{%- elif reg.assign == '->' and reg.dtype not in ('.String', '&.String', '.Data') %}
+    {{ type_name(reg.dtype) }} *{{ reg.name }};
+{%- else %}
+    {{ type_name(reg.dtype) }} {{ reg.name }};
+{%- endif %}
+{%- endfor %}
+{%- endif %}
+
+    /* FIXME: SWI not yet implemented */
+{% for reg in baseswi.exit %}
+{%- if reg.reg == 'FLAGS' -%}
+{%- elif reg.assign == '?' %}
+    /* {{ reg.reg }} corrupted */
+{%- elif reg.assign == '#' %}
+    r->r[{{reg.reg[1:]}}] = 0x{{ '%x'|format(reg.name) }};
+{%- else %}
+    r->r[{{reg.reg[1:]}}] = (int){{ reg.name }};  // {{ reg.dtype }}
+{%- endif %}
+{%- endfor %}
     return err;
 }
     {%- endif -%}

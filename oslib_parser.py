@@ -222,7 +222,6 @@ class DefMod(object):
         self.title = None
         self.types = {}
         self.needs = []
-        self.types = {}
         self.swis = {}  # All of the SWI definitions
         self.interfaces = {}
         # Special cases of swis (the entries are also in SWIs):
@@ -1077,6 +1076,7 @@ def create_module_c_template(defmods, filename):
     template.render_to_file('module-c.j2', filename,
                             {
                                 'defmods': defmods,
+                                'types': defmods.types,
                             })
 
 
