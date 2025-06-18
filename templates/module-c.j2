@@ -81,9 +81,13 @@ _kernel_oserror *Mod_Final(int fatal, int podule_base, void *pw)
   {%- set last_swinum = gapped_swis[-1][0] if (gapped_swis|length) else -1 -%}
   {%- if last_swinum != -1 and swi[0] != last_swinum + 1 -%}
     {# Need to insert a gap #}
-    {%- for n in range(swi[0] - (last_swinum + 1)) -%}
-      {{ gapped_swis.append((last_swinum + 1 + n, [])) or '' }}
-    {%- endfor -%}
+    {%- if swi[0] - (last_swinum + 1) < 64 -%}
+      {%- for n in range(swi[0] - (last_swinum + 1)) -%}
+        {{ gapped_swis.append((last_swinum + 1 + n, [])) or '' }}
+      {%- endfor -%}
+    {%- else -%}
+      {# ERROR in processing - too many SWIs #}
+    {%- endif -%}
   {%- endif -%}
   {{ gapped_swis.append(swi) or '' }}
 {%- endfor -%}
