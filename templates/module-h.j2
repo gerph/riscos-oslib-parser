@@ -3,23 +3,26 @@
 
 {%- macro type_declaration(name, dtype, indent) -%}
 {%- if dtype.__class__.__name__ == 'Struct' -%}
-{{indent}}struct {{name}}_s {
+{{indent}}struct {{ "" if indent != '' else name + '_s ' }}{
 {%- for field in dtype.members %}
-{%- set dtype = field.dtype -%}
-{%- if dtype.__class__.__name__ == 'Array' %}
-{{ type_declaration(field.name, dtype.dtype, indent + '    ') }} {{field.name}}
+{%- if field.dtype.__class__.__name__ == 'Array' %}
+{{ type_declaration(field.name, field.dtype.dtype, indent + '    ') }} {{field.name}}
+{%- else -%}
+{%- if field.dtype.__class__.__name__ == 'str' and ('&' + name == field.dtype) %}
+{{indent}}    struct {{name}}_s * {{field.name}}
 {%- else %}
-{{ type_declaration(field.name, dtype, indent + '    ') }} {{field.name}}
+{{ type_declaration(field.name, field.dtype, indent + '    ') }} {{field.name}}
+{%- endif -%}
 {%- endif %}
 {%- if field.dtype.nelements -%}[{{ field.dtype.nelements if field.dtype.nelements != '...' else '1' }}]{%-endif-%}
-{%- if dtype.dtype.__class__.__name__ == 'Array' -%}
-{%- if dtype.dtype.nelements -%}[{{ dtype.dtype.nelements if dtype.dtype.nelements != '...' else '1' }}]{%-endif-%}
+{%- if field.dtype.dtype.__class__.__name__ == 'Array' -%}
+{%- if field.dtype.dtype.nelements -%}[{{ field.dtype.dtype.nelements if field.dtype.dtype.nelements != '...' else '1' }}]{%-endif-%}
 {%- endif -%}
 ;
 {%- endfor %}
 {{indent}}}
 {%- elif dtype.__class__.__name__ == 'Union' -%}
-{{indent}}union {{name}}_u {
+{{indent}}union {{ "" if indent != '' else name + '_u ' }}{
 {%- for field in dtype.members %}
 {%- set dtype = field.dtype %}
 {{ type_declaration(field.name, dtype, indent + '    ') }} {{field.name}}
@@ -85,25 +88,14 @@
 #ifndef TYPES_H
 #define TYPES_H
 
-/* Types */
-
-{% for pair in used_types(defmod) -%}
-{%- if pair[1] -%}
-typedef {{ type_declaration(pair[0], pair[1], '') }} {{ pair[0] }}
-{%- if pair[1].__class__.__name__ == 'Array' -%}
-[{{pair[1].nelements}}]
-{%- endif -%}
-;
-
-{% else -%}
-{%- endif -%}
-{%- endfor %}
+#include <stdint.h>
+#include <stdbool.h>
 
 
 /* Constants */
 
 {%- set typelist = {} -%}
-{%- for name, constant in defmod.constants.items()|sort %}
+{%- for name, constant in used_constants(defmod) %}
 {%- if constant.dtype in typelist -%}
 {{ typelist[constant.dtype].update({name: constant}) or '' }}
 {%- else -%}
@@ -115,7 +107,7 @@ typedef {{ type_declaration(pair[0], pair[1], '') }} {{ pair[0] }}
 {%- for dtype, constants in typelist.items()|sort %}
 
 /* {{ dtype }} */
-{%- for name, constant in constants.items()|sort %}
+{%- for name, constant in constants.items() %}
 {%- if dtype == '.Int' %}
 #define {{ name }}{{ ' ' * (40 - name|length) }} (
 {%- else %}
@@ -127,6 +119,28 @@ typedef {{ type_declaration(pair[0], pair[1], '') }} {{ pair[0] }}
 {{ value_repr(constant.value, name, dtype) }})
 {%- endif -%}
 {%- endfor -%}
+{%- endfor %}
+
+
+
+/* Types */
+
+{% for pair in used_types(defmod) -%}
+{%- if pair[1] -%}
+{%- if pair[1].__class__.__name__ in ('Struct',) -%}
+{{ type_declaration(pair[0], pair[1], '') }};
+typedef struct {{pair[0]}}_s
+{%- else -%}
+typedef {{ type_declaration(pair[0], pair[1], '') }}
+{%- endif -%}
+{##} {{ pair[0] }}
+{%- if pair[1].__class__.__name__ == 'Array' -%}
+[{{pair[1].nelements}}]
+{%- endif -%}
+;
+
+{% else -%}
+{%- endif -%}
 {%- endfor %}
 
 

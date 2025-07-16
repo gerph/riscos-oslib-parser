@@ -995,10 +995,10 @@ def timestamp(epochtime, time_format="%Y-%m-%d %H:%M:%S"):
 def value_repr(value, name, dtype='unknown'):
     if isinstance(value, (tuple, list)):
         value = value[0]
-    if name.startswith(('Error_', 'Message_')) or name.endswith(('_FileType', '_Class')) or value > 0xffff:
+    if name.startswith(('Error_', 'Message_')) or name.endswith(('_FileType', '_Class', 'Mask')) or value > 0xffff:
         # These are always formatted as Hex
         return '0x%x' % (value,)
-    if name.endswith(('Op', 'Reason', 'No')) or dtype == '.Char' or dtype.endswith(('Op', 'Reason')):
+    if name.endswith(('Op', 'Reason', 'No', 'Limit', 'Shift')) or dtype == '.Char' or dtype.endswith(('Op', 'Reason', 'Action')):
         # Should always be decimals
         return '%i' % (value,)
     if value & (value - 1) == 0:
@@ -1073,8 +1073,10 @@ class TypesUsed(object):
         for swi, swilist in mod.swis.items():
             for swidef in swilist:
                 for reg in swidef.entry:
+                    #print("SWI entry type: %r" % (reg.dtype,))
                     self.use_type(reg.dtype)
                 for reg in swidef.exit:
+                    #print("SWI exit type: %r" % (reg.dtype,))
                     self.use_type(reg.dtype)
 
     def __iter__(self):
@@ -1085,6 +1087,9 @@ class TypesUsed(object):
             yield (name, dtype)
 
     def use_type(self, name):
+        if isinstance(name, str) and name.startswith('&'):
+            name = name[1:]
+
         if name in self.reported:
             return
 
@@ -1106,6 +1111,9 @@ class TypesUsed(object):
             self.use_type(dtype)
 
         elif isinstance(dtype, Struct):
+            # Must include the structure as reported first, in case we have
+            # a self-referential structure.
+            self.reported[name] = True
             for field in dtype.members:
                 field_name = field.name
                 field_dtype = field.dtype
@@ -1125,6 +1133,81 @@ class TypesUsed(object):
 
         if name:
             self.ordered.append(name)
+            self.reported[name] = True
+
+
+class ConstantsUsed(object):
+
+    def __init__(self, mod, all_constants, all_types):
+        self.mod = mod
+        self.all_constants = all_constants
+        self.reported = {}
+        self.ordered = []
+
+        # Explicitly declared types from this module
+        for name, dtype in sorted(mod.constants.items()):
+            self.use_constant(name)
+
+        # Used constants in the other things
+        for name, dtype in TypesUsed(mod, all_types):
+            if dtype:
+                self.use_constant(dtype)
+
+    def __iter__(self):
+        for name in self.ordered:
+            dtype = self.all_constants.get(name, None)
+            if isinstance(dtype, ConstantRef):
+                dtype = dtype.dtype
+            #print("ConstantEnum: %s: %r" % (name, dtype))
+            yield (name, dtype)
+
+    def use_constant(self, name):
+        if isinstance(name, str) and name.startswith('&'):
+            name = name[1:]
+
+        if name in self.reported:
+            return
+
+        if isinstance(name, str):
+            dtype = self.all_constants.get(name, None)
+            if isinstance(dtype, TypeRef):
+                dtype = dtype.dtype
+            #print("Use constant %s: %r" % (name, dtype))
+            if not dtype:
+                self.reported[name] = True
+                return
+        else:
+            dtype = name
+            name = None
+            #print("Use constant type %r" % (dtype,))
+
+        if isinstance(dtype, str):
+            self.use_constant(dtype)
+
+        elif isinstance(dtype, Struct):
+            for field in dtype.members:
+                field_name = field.name
+                field_dtype = field.dtype
+                self.use_constant(field_dtype)
+
+        elif isinstance(dtype, Union):
+            for field in dtype.members:
+                field_name = field.name
+                field_dtype = field.dtype
+                self.use_constant(field_dtype)
+
+        elif isinstance(dtype, Array):
+            self.use_constant(dtype.dtype)
+            if isinstance(dtype.nelements, str) and not dtype.nelements.isdigit():
+                self.use_constant(dtype.nelements)
+
+        elif isinstance(dtype, Constant):
+            self.ordered.append(name)
+
+        else:
+            print("Do not understand type '%s' in ConstantsUsed (%r)" % (dtype.__class__.__name__, dtype))
+
+        if name:
             self.reported[name] = True
 
 
@@ -1152,6 +1235,7 @@ def create_module_template(defmods, filename, filetype):
                                 'defmods': defmods,
                                 'types': defmods.types,
                                 'used_types': lambda defmod: TypesUsed(defmod, defmods.types),
+                                'used_constants': lambda defmod: ConstantsUsed(defmod, defmods.constants, defmods.types),
                             })
 
 
@@ -1314,6 +1398,10 @@ class TypeRef(object):
                                                   self.name, self.defmod, self.dtype)
 
 
+class ConstantRef(TypeRef):
+    pass
+
+
 class DefMods(object):
     sections = [
             'Core',
@@ -1328,6 +1416,7 @@ class DefMods(object):
         self.defmods = []
         self.modnames = {}
         self._all_types = None
+        self._all_constants = None
 
     def __repr__(self):
         return "<{}({} defmods)>".format(self.__class__.__name__,
@@ -1397,6 +1486,16 @@ class DefMods(object):
                 self._all_types.update(types)
 
         return self._all_types
+
+    @property
+    def constants(self):
+        if self._all_constants is None:
+            self._all_constants = {}
+            for defmod in self.defmods:
+                types = dict((name, ConstantRef(name=name, dtype=dtype, defmod=defmod)) for name, dtype in defmod.constants.items())
+                self._all_constants.update(types)
+
+        return self._all_constants
 
 
 def setup_argparse():

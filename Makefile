@@ -62,6 +62,10 @@ aarch64:
 	mkdir -p ${OUTPUT}/aarch64
 	./make-aarch64.sh ${OUTPUT}/aarch64 ${SWI_FILES}
 
-module-templates:
+module-templates: vmanage
 	mkdir -p ${OUTPUT}/cmodule-templates
 	./make-c-module-templates.sh ${OUTPUT}/cmodule-templates ${SWI_FILES}
+
+vmanage:
+	wget -O vmanage https://raw.githubusercontent.com/gerph/riscos-vmanage/refs/heads/master/vmanage
+	chmod +x vmanage

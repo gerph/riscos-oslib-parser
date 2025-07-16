@@ -60,7 +60,7 @@
 
 {% for defmod in defmods[0:1] -%}
 /*******************************************************************
- * File:     veneer
+ * File:     module
  * Purpose:  SWI veneers for the {{ defmod.name }} module
  * Author:   XXX
  * Date:     {{ timestamp(now(), "%d %b %Y") }}
@@ -173,7 +173,7 @@ _kernel_oserror *Mod_Final(int fatal, int podule_base, void *pw)
  *               Return error_BAD_SWI for out of range SWIs.
  *               Return an error block for a custom error.
  **************************************************************************/
-_kernel_oserror *SWI_{{ swilist[0].name.split('_', 1)[1] }}(int number, _kernel_swi_regs *r, void *pw)
+_kernel_oserror *SWI_{{ swilist[0].name.split('_', 1)[1] }}(int number, _kernel_swi_regs *regs, void *pw)
 {
     _kernel_oserror *err = NULL;
     /*
@@ -196,9 +196,9 @@ _kernel_oserror *SWI_{{ swilist[0].name.split('_', 1)[1] }}(int number, _kernel_
 {%- if reg.assign == '#' %}
     /* {{ reg.reg }} is {{ reg.name }} */
 {%- elif reg.assign == '->' and reg.dtype not in ('.String', '&.String', '.Data') %}
-    {{ type_name(reg.dtype) }} *{{ reg.name }} = ({{ type_name(reg.dtype) }} *)r->r[{{reg.reg[1:]}}];
+    {{ type_name(reg.dtype) }} *{{ reg.name }} = ({{ type_name(reg.dtype) }} *)regs->r[{{reg.reg[1:]}}];
 {%- else %}
-    {{ type_name(reg.dtype) }} {{ reg.name }} = ({{ type_name(reg.dtype) }})r->r[{{reg.reg[1:]}}];
+    {{ type_name(reg.dtype) }} {{ reg.name }} = ({{ type_name(reg.dtype) }})regs->r[{{reg.reg[1:]}}];
 {%- endif %}
 {%- endfor %}
 {%- endif %}
@@ -221,9 +221,9 @@ _kernel_oserror *SWI_{{ swilist[0].name.split('_', 1)[1] }}(int number, _kernel_
 {%- elif reg.assign == '?' %}
     /* {{ reg.reg }} corrupted */
 {%- elif reg.assign == '#' %}
-    r->r[{{reg.reg[1:]}}] = 0x{{ '%x'|format(reg.name) }};
+    regs->r[{{reg.reg[1:]}}] = 0x{{ '%x'|format(reg.name) }};
 {%- else %}
-    r->r[{{reg.reg[1:]}}] = (int){{ reg.name }};  // {{ reg.dtype }}
+    regs->r[{{reg.reg[1:]}}] = (int){{ reg.name }};  // {{ reg.dtype }}
 {%- endif %}
 {%- endfor %}
     return err;
