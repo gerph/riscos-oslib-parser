@@ -1,0 +1,134 @@
+{#- We only really expect a single module, but if they really request multiple, we'll do it -#}
+
+
+{%- macro type_declaration(name, dtype, indent) -%}
+{%- if dtype.__class__.__name__ == 'Struct' -%}
+{{indent}}struct {{name}}_s {
+{%- for field in dtype.members %}
+{%- set dtype = field.dtype -%}
+{%- if dtype.__class__.__name__ == 'Array' %}
+{{ type_declaration(field.name, dtype.dtype, indent + '    ') }} {{field.name}}
+{%- else %}
+{{ type_declaration(field.name, dtype, indent + '    ') }} {{field.name}}
+{%- endif %}
+{%- if field.dtype.nelements -%}[{{ field.dtype.nelements if field.dtype.nelements != '...' else '1' }}]{%-endif-%}
+{%- if dtype.dtype.__class__.__name__ == 'Array' -%}
+{%- if dtype.dtype.nelements -%}[{{ dtype.dtype.nelements if dtype.dtype.nelements != '...' else '1' }}]{%-endif-%}
+{%- endif -%}
+;
+{%- endfor %}
+{{indent}}}
+{%- elif dtype.__class__.__name__ == 'Union' -%}
+{{indent}}union {{name}}_u {
+{%- for field in dtype.members %}
+{%- set dtype = field.dtype %}
+{{ type_declaration(field.name, dtype, indent + '    ') }} {{field.name}}
+{%- if field.dtype.nelements -%}[{{ field.dtype.nelements if field.dtype.nelements != '...' else '1' }}]{%-endif-%}
+;
+{%- endfor %}
+{{indent}}}
+{%- else -%}
+{{indent}}{{ type_name(dtype) }}
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro type_name(dtype) -%}
+ {%- if dtype in ('.Any', '.Asm', '&.Asm', '&Void', '&.Data', '.Data') -%}
+  void *
+ {%- elif dtype == '.Bool' -%}
+  bool
+ {%- elif dtype == '.Int' -%}
+  int32_t
+ {%- elif dtype == '.Short' -%}
+  int16_t
+ {%- elif dtype == '.Bits' -%}
+  uint32_t
+ {%- elif dtype == '.Char' -%}
+  uint8_t
+ {%- elif dtype == '.Byte' -%}
+  uint8_t
+ {%- elif dtype == '&.String' -%}
+  char *
+ {%- elif dtype == '.String' -%}
+  char *
+ {%- elif dtype.__class__.__name__ in ('Array') -%}
+  {{ type_name(dtype.dtype) }}
+ {%- elif dtype.__class__.__name__ in ('Union', 'Struct') -%}
+  {{ dtype.name or "<unknown name of a " + dtype.__class__.__name__ + ">" }}
+ {%- else -%}
+  {%- if dtype[0] == '&' -%}
+   {{ type_name(dtype[1:]) }} *
+  {%- else -%}
+   {# It might be a type we can immediately dereference #}
+   {%- if dtype in types -%}
+    {%- if types[dtype].defmod.inctype == 'required' -%}
+     {{ dtype }}
+    {%- else -%}
+     {{ dtype }}
+    {%- endif -%}
+   {%- else -%}
+    "unknown type {{ dtype }}"
+   {%- endif -%}
+  {%- endif -%}
+ {%- endif -%}
+{%- endmacro -%}
+
+
+{% for defmod in defmods[0:1] -%}
+/*******************************************************************
+ * File:     types
+ * Purpose:  Types used for the {{ defmod.name }} module
+ * Author:   XXX
+ * Date:     {{ timestamp(now(), "%d %b %Y") }}
+ ******************************************************************/
+
+#ifndef TYPES_H
+#define TYPES_H
+
+/* Types */
+
+{% for pair in used_types(defmod) -%}
+{%- if pair[1] -%}
+typedef {{ type_declaration(pair[0], pair[1], '') }} {{ pair[0] }}
+{%- if pair[1].__class__.__name__ == 'Array' -%}
+[{{pair[1].nelements}}]
+{%- endif -%}
+;
+
+{% else -%}
+{%- endif -%}
+{%- endfor %}
+
+
+/* Constants */
+
+{%- set typelist = {} -%}
+{%- for name, constant in defmod.constants.items()|sort %}
+{%- if constant.dtype in typelist -%}
+{{ typelist[constant.dtype].update({name: constant}) or '' }}
+{%- else -%}
+{{ typelist.update({constant.dtype: {name: constant}}) or '' }}
+{%- endif -%}
+
+{%- endfor -%}
+
+{%- for dtype, constants in typelist.items()|sort %}
+
+/* {{ dtype }} */
+{%- for name, constant in constants.items()|sort %}
+{%- if dtype == '.Int' %}
+#define {{ name }}{{ ' ' * (40 - name|length) }} (
+{%- else %}
+#define {{ name }}{{ ' ' * (40 - name|length) }} (({{type_name(dtype)}})
+{%- endif -%}
+{%- if constant.value.__class__.__name__ == 'list' -%}
+{{ value_repr(constant.value[0], name, dtype) }}) /* {{ constant.value[1] }} */
+{%- else -%}
+{{ value_repr(constant.value, name, dtype) }})
+{%- endif -%}
+{%- endfor -%}
+{%- endfor %}
+
+
+#endif
+{% endfor %}

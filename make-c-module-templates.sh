@@ -18,6 +18,8 @@ for file in "$@" ; do
     echo "+++ Processing $name from $file"
     mkdir -p "$dest/$name/cmhg"
     mkdir -p "$dest/$name/c"
+    mkdir -p "$dest/$name/h"
     python oslib_parser.py --create-module-cmhg-template "$dest/$name/cmhg/modhead" "$file" --oslib-dir "$OSLIB_DIR"
-    python oslib_parser.py --create-module-c-template "$dest/$name/c/module" "$file" --oslib-dir "$OSLIB_DIR"
+    python oslib_parser.py --create-module-c-template "$dest/$name/c/veneer" "$file" --oslib-dir "$OSLIB_DIR"
+    python oslib_parser.py --create-module-h-template "$dest/$name/h/types" "$file" --oslib-dir "$OSLIB_DIR"
 done

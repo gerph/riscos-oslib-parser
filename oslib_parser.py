@@ -992,12 +992,15 @@ def timestamp(epochtime, time_format="%Y-%m-%d %H:%M:%S"):
     return datetime.datetime.fromtimestamp(epochtime).strftime(time_format)
 
 
-def value_repr(value, name):
+def value_repr(value, name, dtype='unknown'):
     if isinstance(value, (tuple, list)):
         value = value[0]
-    if name.startswith(('Error_', 'Message_')) or name.endswith(('_FileType',)):
-        # These two are always formatted as Hex
+    if name.startswith(('Error_', 'Message_')) or name.endswith(('_FileType', '_Class')) or value > 0xffff:
+        # These are always formatted as Hex
         return '0x%x' % (value,)
+    if name.endswith(('Op', 'Reason', 'No')) or dtype == '.Char' or dtype.endswith(('Op', 'Reason')):
+        # Should always be decimals
+        return '%i' % (value,)
     if value & (value - 1) == 0:
         if value == 0:
             return '0'
@@ -1054,6 +1057,77 @@ class Templates(object):
             f.write(content.encode("utf-8"))
 
 
+class TypesUsed(object):
+
+    def __init__(self, mod, all_types):
+        self.mod = mod
+        self.all_types = all_types
+        self.reported = {}
+        self.ordered = []
+
+        # Explicitly declared types from this module
+        for name, dtype in sorted(mod.types.items()):
+            self.use_type(name)
+
+        # Used types in the SWIs
+        for swi, swilist in mod.swis.items():
+            for swidef in swilist:
+                for reg in swidef.entry:
+                    self.use_type(reg.dtype)
+                for reg in swidef.exit:
+                    self.use_type(reg.dtype)
+
+    def __iter__(self):
+        for name in self.ordered:
+            dtype = self.all_types.get(name, None)
+            if isinstance(dtype, TypeRef):
+                dtype = dtype.dtype
+            yield (name, dtype)
+
+    def use_type(self, name):
+        if name in self.reported:
+            return
+
+        if isinstance(name, str):
+            dtype = self.all_types.get(name, None)
+            if isinstance(dtype, TypeRef):
+                dtype = dtype.dtype
+            #print("Use type %s: %r" % (name, dtype))
+            if not dtype:
+                self.ordered.append(name)
+                self.reported[name] = True
+                return
+        else:
+            dtype = name
+            name = None
+            #print("Use type %r" % (dtype,))
+
+        if isinstance(dtype, str):
+            self.use_type(dtype)
+
+        elif isinstance(dtype, Struct):
+            for field in dtype.members:
+                field_name = field.name
+                field_dtype = field.dtype
+                self.use_type(field_dtype)
+
+        elif isinstance(dtype, Union):
+            for field in dtype.members:
+                field_name = field.name
+                field_dtype = field.dtype
+                self.use_type(field_dtype)
+
+        elif isinstance(dtype, Array):
+            self.use_type(dtype.dtype)
+
+        else:
+            print("Do not understand type '%s' in TypesUsed (%r)" % (dtype.__class__.__name__, dtype))
+
+        if name:
+            self.ordered.append(name)
+            self.reported[name] = True
+
+
 class LocalTemplates(Templates):
 
     def __init__(self, path=None):
@@ -1071,20 +1145,13 @@ def create_message_details(defmods, filename):
                             })
 
 
-def create_module_cmhg_template(defmods, filename):
+def create_module_template(defmods, filename, filetype):
     template = LocalTemplates('templates')
-    template.render_to_file('module-cmhg.j2', filename,
-                            {
-                                'defmods': defmods,
-                            })
-
-
-def create_module_c_template(defmods, filename):
-    template = LocalTemplates('templates')
-    template.render_to_file('module-c.j2', filename,
+    template.render_to_file('module-{}.j2'.format(filetype), filename,
                             {
                                 'defmods': defmods,
                                 'types': defmods.types,
+                                'used_types': lambda defmod: TypesUsed(defmod, defmods.types),
                             })
 
 
@@ -1348,6 +1415,8 @@ def setup_argparse():
                         help="File to write a CMHG template for a C module into")
     parser.add_argument('--create-module-c-template', action='store',
                         help="File to write a C source template for a C module into")
+    parser.add_argument('--create-module-h-template', action='store',
+                        help="File to write a C header template for a C module into")
     parser.add_argument('--create-pymodule-template', action='store',
                         help="File to write a template for a RISC OS Pyromaniac module")
     parser.add_argument('--create-pymodule-constants', action='store',
@@ -1396,10 +1465,13 @@ def main():
         create_message_details(defmods, options.create_message_details)
 
     if options.create_module_cmhg_template:
-        create_module_cmhg_template(defmods, options.create_module_cmhg_template)
+        create_module_template(defmods, options.create_module_cmhg_template, 'cmhg')
 
     if options.create_module_c_template:
-        create_module_c_template(defmods, options.create_module_c_template)
+        create_module_template(defmods, options.create_module_c_template, 'c')
+
+    if options.create_module_h_template:
+        create_module_template(defmods, options.create_module_h_template, 'h')
 
     if options.create_pymodule_template:
         create_pymodule_template(defmods, options.create_pymodule_template)
