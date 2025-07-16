@@ -16,7 +16,7 @@ VMANAGE=
 if type -p vmanage 2> /dev/null > /dev/null ; then
     VMANAGE=vmanage
 elif [[ -x ./vmanage ]] ; then
-    VMANAGE=./vmanage
+    VMANAGE="$PWD/vmanage"
 fi
 
 
@@ -58,6 +58,6 @@ for file in "$@" ; do
     python oslib_parser.py --create-module-h-template "$dest/$name/h/types" "$file" --oslib-dir "$OSLIB_DIR"
     if [[ "$VMANAGE" != '' ]] ; then
         # VManage can be located https://github.com/gerph/riscos-vmanage
-        ( cd "$dest/$name" ; "$VMANAGE" init )
+        ( cd "$dest/$name" ; $VMANAGE init )
     fi
 done
