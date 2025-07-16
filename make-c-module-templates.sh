@@ -15,7 +15,7 @@ fi
 VMANAGE=
 if type -p vmanage 2> /dev/null > /dev/null ; then
     VMANAGE=vmanage
-elif -x ./vmanage ; then
+elif [[ -x ./vmanage ]] ; then
     VMANAGE=./vmanage
 fi
 
