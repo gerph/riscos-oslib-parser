@@ -42,27 +42,27 @@ ${OUTPUT}/nvram_constants.py: oslib dirs
 ${OUTPUT}/wimp_messages.py: oslib dirs
 	python oslib_parser.py --oslib-dir ${OSLIB_SOURCES} --create-message-details $@ ${SWI_FILES}
 
-pymodules-templates:
+pymodules-templates: oslib dirs
 	mkdir -p ${OUTPUT}/pymodule-templates
 	./make-pymodule-templates.sh ${OUTPUT}/pymodule-templates ${SWI_FILES}
 
-pymodules-constants:
+pymodules-constants: oslib dirs
 	mkdir -p ${OUTPUT}/pymodule-constants
 	./make-pymodule-constants.sh ${OUTPUT}/pymodule-constants ${SWI_FILES}
 
-pyromaniac-apis:
+pyromaniac-apis: oslib dirs
 	mkdir -p ${OUTPUT}/pyromaniac-apis
 	./make-pyromaniac-apis.sh ${OUTPUT}/pyromaniac-apis ${SWI_FILES}
 
-python-apis:
+python-apis: oslib dirs
 	mkdir -p ${OUTPUT}/python-apis
 	./make-python-apis.sh ${OUTPUT}/python-apis ${SWI_FILES}
 
-aarch64:
+aarch64: oslib dirs
 	mkdir -p ${OUTPUT}/aarch64
 	./make-aarch64.sh ${OUTPUT}/aarch64 ${SWI_FILES}
 
-module-templates: vmanage
+module-templates: vmanage oslib dirs
 	mkdir -p ${OUTPUT}/cmodule-templates
 	./make-c-module-templates.sh ${OUTPUT}/cmodule-templates ${SWI_FILES}
 
