@@ -12,10 +12,11 @@
 # different components
 #
 
-for i in generated/cmodule-templates/* ; do
-    if [[ -d "$i" ]] ; then
-        cd $i
-        riscos-project create --type cmodule --name "$(basename "$i")"
+for dir in generated/cmodule-templates/* ; do
+    if [[ -d "$dir" ]] ; then
+        cd "$dir"
+        rm -f Makefile,fe1
+        riscos-project create --type cmodule --name "$(basename "$dir")"
         riscos-amu
         cd -
     fi

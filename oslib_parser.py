@@ -153,6 +153,7 @@ class SWI(object):
 
     def __init__(self, name):
         self.name = name
+        self.defname = name     # The defined name (not the modified name)
         self.number = None
         self.description = None
         self.starred = False
@@ -230,8 +231,12 @@ class DefMod(object):
         self.title = None
         self.types = {}
         self.needs = []
+        self.types = {}
         self.swis = {}  # All of the SWI definitions
+
+        # All the interfaces (swis, vectors, service, events, upcalls)
         self.interfaces = {}
+
         # Special cases of swis (the entries are also in SWIs):
         self.modswis = {}  # Just the SWIs for this module
         self.vectors = {}
@@ -1236,6 +1241,7 @@ def create_module_template(defmods, filename, filetype):
                                 'types': defmods.types,
                                 'used_types': lambda defmod: TypesUsed(defmod, defmods.types),
                                 'used_constants': lambda defmod: ConstantsUsed(defmod, defmods.constants, defmods.types),
+                                'dtype_width': lambda dtype: dtype_width(dtype, defmods),
                             })
 
 
@@ -1265,9 +1271,14 @@ def create_python_api_template(defmods, filename):
 
 
 # Replacements for the function name expansion
-oslib_swifunc1_re = re.compile("([A-Z])([A-Z][a-z])")
-oslib_swifunc2_re = re.compile("([a-z])([A-Z])")
+oslib_swifunc1_re = re.compile("([^a-z])([A-Z])([A-Z][a-z])")
+oslib_swifunc2_re = re.compile("([a-z0-9])([A-Z])(?!$)")
 
+# Special names that aren't subject to the usual transformation
+oslib_swifunc_special = {
+        'Hourglass_LEDs': 'hourglass_leds',
+        'OS_CallAVector': 'os_call_a_vector',
+    }
 
 def oslib_swifunc(name):
     """
@@ -1278,13 +1289,48 @@ def oslib_swifunc(name):
     Multiple capitalised letters should become a single string,
     eg Portable_ReadBMUVariable should become xportable_read_bmu_variable
     """
+
+    # Handle the special cases
+    replacement = oslib_swifunc_special.get(name)
+    if replacement:
+        return replacement
+
     if '_' not in name:
         print("Warning: SWI '{}' does not have any underscore".format(name))
         return name.lower()
     (module, name) = name.split('_', 1)
-    name = oslib_swifunc1_re.sub(r"\1_\2", name)
+    name = oslib_swifunc1_re.sub(r"\1\2_\3", name)
     name = oslib_swifunc2_re.sub(r"\1_\2", name)
     return ("%s_%s" % (module, name)).lower()
+
+
+def dtype_width(dtype, defmods):
+    """
+    Return the bit-width of a given type.
+    """
+    width = 64;
+    if isinstance(dtype, tuple):
+        dtype = dtype[0]
+    if isinstance(dtype, str):
+        dtype = dtype.lower()
+        #print("dtype: %s" % (dtype,))
+
+        while isinstance(dtype, str):
+            resolved = defmods.lookup_type(dtype)
+            if resolved:
+                #print("  resolves to %s" % (resolved,))
+                dtype = resolved.dtype
+            else:
+                break
+
+    if not isinstance(dtype, str):
+        raise RuntimeError("Cannot determine width of %r" % (dtype,))
+
+    if dtype[0] == '&':
+        width = 64
+    elif dtype in ('.int', '.bits', '.bool'):
+        width = 32
+    return width
 
 
 def create_aarch64_api(defmods, filename):
@@ -1315,6 +1361,7 @@ def create_aarch64_api(defmods, filename):
                                 'types': defmods.types,
                                 'simple_orr_constant': simple_orr_constant,
                                 'oslib_swifunc': oslib_swifunc,
+                                'dtype_width': lambda dtype: dtype_width(dtype, defmods),
                             })
 
 
@@ -1416,6 +1463,7 @@ class DefMods(object):
         self.defmods = []
         self.modnames = {}
         self._all_types = None
+        self._lookup_types = None
         self._all_constants = None
 
     def __repr__(self):
@@ -1477,6 +1525,10 @@ class DefMods(object):
         # Clear the cache
         self._all_types = None
 
+    def lookup_type(self, name):
+        name = name.lower()
+        return self.lookup_types.get(name, None)
+
     @property
     def types(self):
         if self._all_types is None:
@@ -1486,6 +1538,17 @@ class DefMods(object):
                 self._all_types.update(types)
 
         return self._all_types
+
+    @property
+    def lookup_types(self):
+        if self._lookup_types is None:
+            self._lookup_types = {}
+            for defmod in self.defmods:
+                types = dict((name, TypeRef(name=name, dtype=dtype, defmod=defmod)) for name, dtype in defmod.types.items())
+                for name, tref in types.items():
+                    self._lookup_types[name.lower()] = tref
+
+        return self._lookup_types
 
     @property
     def constants(self):
