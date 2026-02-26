@@ -80,7 +80,7 @@ jobs:
       contents: write
     steps:
       - name: Download example generated files
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: Examples
 
