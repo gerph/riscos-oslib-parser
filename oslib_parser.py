@@ -970,6 +970,7 @@ def write_swi_conditions(swis, fh):
                 entry_reglist = ['%i: "%s"' % (num, desc) for num, desc in sorted(regdefs['entry'].items())]
                 exit_reglist = ['%i: "%s"' % (num, desc) for num, desc in sorted(regdefs['exit'].items())]
 
+                #fh.write("%s# %r\n" % (indent, swidef,)) ; indent = '               '
                 fh.write("%s{'label': %r,\n" % (indent, swidef.name,))
                 indent = '               '
                 fh.write("%s 'match': {%s},\n" % (indent, ', '.join(match_reglist),))
@@ -984,6 +985,7 @@ def write_swi_conditions(swis, fh):
 
                 entry_reglist = ['%i: "%s"' % (num, desc) for num, desc in sorted(regdefs['entry'].items())]
                 exit_reglist = ['%i: "%s"' % (num, desc) for num, desc in sorted(regdefs['exit'].items())]
+                #fh.write("%s# %r\n" % (indent, swidef,)) ; indent = '               '
                 fh.write("%s{'label': %r,\n" % (indent, swidef.name))
                 indent = '               '
                 fh.write("%s " % (indent,))
@@ -996,6 +998,7 @@ def write_swi_conditions(swis, fh):
 
             entry_reglist = ['%i: "%s"' % (num, desc) for num, desc in sorted(regdefs['entry'].items())]
             exit_reglist = ['%i: "%s"' % (num, desc) for num, desc in sorted(regdefs['exit'].items())]
+            #fh.write("%s# %r\n" % (indent, swidef,)) ; indent = '               '
             fh.write("    0x%06x: [{" % (swidef.number,))
             indent = '               '
             fh.write("'label': %r,\n" % (swidef.name,))
@@ -1535,8 +1538,11 @@ class DefMods(object):
 
     def add(self, defmodfile, inctype='required'):
         defmod = parse_file(defmodfile, inctype=inctype)
-        self.defmods.append(defmod)
+        if defmod.modname in self.modnames:
+            # Already processed this module
+            return
         self.modnames[defmod.modname] = defmod
+        self.defmods.append(defmod)
 
         for need in defmod.needs:
             need = need.lower()
